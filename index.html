@@ -1,0 +1,91 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgentForge | Usine à Documentation Produit & Tech</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module" src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap');
+
+        :root {
+            --af-blue: #007BFF;
+            --af-blue-dark: #0056B3;
+            --af-orange: #FF8C00;
+            --af-surface: #09090b;
+            --af-card: #18181b;
+            --af-border: rgba(255, 255, 255, 0.1);
+            --af-text: #E6E1E5;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--af-surface);
+            color: var(--af-text);
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .af-gradient-text {
+            background: linear-gradient(135deg, #FFF 0%, var(--af-blue) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .m3-card {
+            background: var(--af-card);
+            border: 1px solid var(--af-border);
+            border-radius: 24px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .m3-card:hover {
+            border-color: var(--af-blue);
+            box-shadow: 0 0 20px rgba(0, 123, 255, 0.15);
+            transform: translateY(-2px);
+        }
+
+        .m3-button-primary {
+            background: var(--af-blue);
+            color: white;
+            border-radius: 16px;
+            font-weight: 700;
+            transition: all 0.2s;
+        }
+
+        .m3-button-primary:hover {
+            background: var(--af-blue-dark);
+            transform: scale(1.02);
+            box-shadow: 0 0 15px rgba(0, 123, 255, 0.4);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--af-border); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--af-blue); }
+
+        pre { font-family: 'Fira Code', monospace; }
+        
+        /* Mermaid styling */
+        .mermaid { background: transparent; display: flex; justify-content: center; padding: 20px; border-radius: 12px; }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "@google/genai": "https://esm.sh/@google/genai@^1.35.0",
+    "zod": "https://esm.sh/zod@^3.24.2"
+  }
+}
+</script>
+</head>
+<body>
+    <div id="root"></div>
+</body>
+</html>
