@@ -1,39 +1,41 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  Plus, LayoutGrid, History, Briefcase, 
+  Plus, History, Briefcase, 
   ShieldCheck, Zap, ArrowRight, Download, 
-  Loader2, AlertTriangle, Trash2, ExternalLink,
-  ChevronRight, FileText, CheckCircle
+  Loader2, Trash2, ChevronRight, Moon, Sun, Layout,
+  Layers, MessageSquare, Box, FileOutput, FileText
 } from 'lucide-react';
-import { PocketStore, Artifact, ProjectMode } from './types';
+import { PocketStore, Artifact } from './types';
 import { clarifyNode, runAgentForge, refineArtifactNode } from './services/pocketFlow';
 import ArtifactCard from './components/ArtifactCard';
 import SideDrawer from './components/SideDrawer';
 import DottedBackground from './components/DottedBackground';
 
-const PACKS = [
-  { id: 'lite', name: 'MVP Rapide', icon: <Zap className="w-5 h-5"/>, desc: 'Focus vitesse' },
-  { id: 'normal', name: 'SaaS Standard', icon: <Briefcase className="w-5 h-5"/>, desc: 'Équilibre pro' },
-  { id: 'detailed', name: 'Fintech / Sec', icon: <ShieldCheck className="w-5 h-5"/>, desc: 'Haute rigueur' },
-];
-
 const App: React.FC = () => {
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    return (localStorage.getItem('af_theme') as 'light' | 'dark') || 'dark';
+  });
+
   const [projects, setProjects] = useState<PocketStore[]>(() => {
-    const saved = localStorage.getItem('agentforge_library');
+    const saved = localStorage.getItem('agentforge_library_v2');
     return saved ? JSON.parse(saved) : [];
   });
 
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
-  const [view, setView] = useState<'editor' | 'history'>('editor');
-  
+  const [view, setView] = useState<'editor' | 'history' | 'landing'>('landing');
+  const [inputValue, setInputValue] = useState('');
+  const [selectedArtifact, setSelectedArtifact] = useState<Artifact | null>(null);
+
   const currentProject = projects.find(p => p.id === activeProjectId) || null;
 
-  const [selectedArtifact, setSelectedArtifact] = useState<Artifact | null>(null);
-  const [inputValue, setInputValue] = useState('');
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('af_theme', theme);
+  }, [theme]);
 
   useEffect(() => {
-    localStorage.setItem('agentforge_library', JSON.stringify(projects));
+    localStorage.setItem('agentforge_library_v2', JSON.stringify(projects));
   }, [projects]);
 
   const updateCurrentProject = (update: Partial<PocketStore>) => {
@@ -42,7 +44,7 @@ const App: React.FC = () => {
     ));
   };
 
-  const handleStartClarification = async (e: React.FormEvent) => {
+  const createProject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputValue.trim()) return;
 
@@ -53,8 +55,8 @@ const App: React.FC = () => {
       createdAt: Date.now(),
       mode: 'normal',
       language: 'FR',
-      status: 'clarifying',
-      currentStep: 'Initialisation...',
+      status: 'idle',
+      currentStep: 'Initialisation du Workspace...',
       questions: [],
       answers: {},
       artifacts: []
@@ -63,6 +65,7 @@ const App: React.FC = () => {
     setProjects(prev => [newProject, ...prev]);
     setActiveProjectId(newId);
     setView('editor');
+    setInputValue('');
     
     await clarifyNode(inputValue, (u) => {
       setProjects(prev => prev.map(p => p.id === newId ? { ...p, ...u } : p));
@@ -71,7 +74,6 @@ const App: React.FC = () => {
 
   const handleLaunchForge = async () => {
     if (!currentProject) return;
-    updateCurrentProject({ status: 'generating', currentStep: 'Orchestration des Agents...' });
     await runAgentForge(currentProject, (u) => {
       setProjects(prev => prev.map(p => p.id === currentProject.id ? { ...p, ...u } : p));
     });
@@ -88,251 +90,318 @@ const App: React.FC = () => {
     });
   };
 
-  const handleDeleteProject = (id: string, e: React.MouseEvent) => {
+  const handleDelete = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (confirm("Supprimer définitivement ce projet ?")) {
+    if (confirm("Supprimer ce projet ?")) {
       setProjects(prev => prev.filter(p => p.id !== id));
-      if (activeProjectId === id) setActiveProjectId(null);
+      if (activeProjectId === id) {
+        setActiveProjectId(null);
+        setView('landing');
+      }
     }
   };
 
-  const downloadFullProject = (project: PocketStore) => {
-    const content = project.artifacts.map(a => 
-      `# ${a.title}\nRole: ${a.role}\nSummary: ${a.summary}\n\n${a.content}\n\n---`
-    ).join('\n\n');
-    const blob = new Blob([content], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `AgentForge_${project.idea_raw.slice(0, 20)}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const exportProject = (project: PocketStore) => {
+    if (!project) return;
+    
+    try {
+      let md = `# AgentForge Project Report: ${project.idea_raw}\n`;
+      md += `*Generated by AgentForge AI on: ${new Date(project.createdAt).toLocaleString()}*\n\n`;
+      
+      md += `## 1. Initial Concept\n`;
+      md += `> ${project.idea_raw}\n\n`;
+
+      if (Object.keys(project.answers).length > 0) {
+        md += `## 2. Clarification Q&A\n`;
+        project.questions.forEach(q => {
+          const answer = project.answers[q.id];
+          if (answer) {
+            md += `### ${q.text}\n`;
+            md += `*Answer:* ${answer}\n\n`;
+          }
+        });
+      }
+
+      if (project.intent) {
+        md += `## 3. Strategic Intent\n`;
+        md += `**Goal:** ${project.intent.goal}\n`;
+        md += `**Target Audience:** ${project.intent.target}\n`;
+        md += `**Constraints:**\n${project.intent.constraints.map(c => `- ${c}`).join('\n')}\n\n`;
+      }
+
+      if (project.app_map) {
+        md += `## 4. Application Map\n`;
+        project.app_map.modules.forEach((mod, idx) => {
+          md += `### Module ${idx + 1}: ${mod.name}\n`;
+          md += `**Description:** ${mod.description}\n`;
+          md += `**Key Features:**\n${mod.features.map(f => `- ${f}`).join('\n')}\n\n`;
+        });
+      }
+
+      md += `## 5. Expert Artifacts\n\n`;
+      project.artifacts.forEach(art => {
+        if (art.type === 'prototype') {
+          md += `---\n### ${art.role}: ${art.title}\n`;
+          md += `*(Note: Le code source du prototype est trop volumineux pour ce rapport Markdown. Veuillez le télécharger séparément.)*\n\n`;
+          return;
+        }
+        md += `---\n### ${art.role}: ${art.title}\n`;
+        md += `**Confidence Score:** ${(art.confidence * 100).toFixed(1)}%\n\n`;
+        md += `**Executive Summary:** ${art.summary}\n\n`;
+        md += art.content + "\n\n";
+      });
+
+      const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `AgentForge_${project.idea_raw.substring(0, 30).replace(/\s+/g, '_')}_FullReport.md`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Export failed:", err);
+      alert("L'exportation a échoué. Veuillez réessayer.");
+    }
   };
 
   return (
-    <div className="h-screen flex bg-[#09090b] text-[#E6E1E5] overflow-hidden">
+    <div className="min-h-screen flex bg-[var(--bg-primary)] text-[var(--text-primary)] transition-colors">
       <DottedBackground />
 
-      <nav className="w-20 border-r border-white/5 flex flex-col items-center py-8 gap-10 z-50 bg-[#09090b]">
-        <div className="w-12 h-12 bg-[#007BFF] rounded-2xl flex items-center justify-center text-white shadow-lg cursor-pointer hover:scale-105 transition-all" onClick={() => setView('editor')}>
+      {/* Mini Sidebar */}
+      <nav className="w-16 md:w-20 border-r border-[var(--border)] flex flex-col items-center py-8 gap-10 z-[60] bg-[var(--bg-secondary)] sticky top-0 h-screen">
+        <div 
+          onClick={() => setView('landing')}
+          className="w-10 h-10 md:w-12 md:h-12 bg-blue-600 rounded-xl flex items-center justify-center text-white cursor-pointer hover:rotate-12 transition-all shadow-xl"
+        >
           <Zap className="w-6 h-6" />
         </div>
-        <div className="flex flex-col gap-6 flex-1">
-          <button 
-            onClick={() => { setActiveProjectId(null); setView('editor'); setInputValue(''); }} 
-            className={`p-3 rounded-full transition-all ${!activeProjectId && view === 'editor' ? 'bg-white/10 text-white' : 'text-zinc-500 hover:text-white'}`}
-          >
+        
+        <div className="flex flex-col gap-8 flex-1">
+          <button onClick={() => setView('landing')} className={`p-3 rounded-full transition-all ${view === 'landing' ? 'bg-blue-500/10 text-blue-500 scale-110' : 'text-slate-500 hover:text-slate-200'}`}>
             <Plus className="w-6 h-6" />
           </button>
-          <button 
-            onClick={() => setView('history')}
-            className={`p-3 rounded-full transition-all ${view === 'history' ? 'bg-white/10 text-[#007BFF]' : 'text-zinc-500 hover:text-white'}`}
-          >
+          <button onClick={() => setView('history')} className={`p-3 rounded-full transition-all ${view === 'history' ? 'bg-blue-500/10 text-blue-500 scale-110' : 'text-slate-500 hover:text-slate-200'}`}>
             <History className="w-6 h-6" />
           </button>
         </div>
+
+        <button 
+          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          className="p-3 text-slate-500 hover:text-blue-500 transition-colors mb-4"
+        >
+          {theme === 'dark' ? <Sun className="w-6 h-6" /> : <Moon className="w-6 h-6" />}
+        </button>
       </nav>
 
-      <div className="flex-1 flex flex-col relative overflow-hidden">
-        <header className="h-20 px-10 flex justify-between items-center border-b border-white/5 bg-[#09090b]/80 backdrop-blur-md z-40">
-          <div className="flex items-center gap-4">
-            <h1 className="text-xl font-bold tracking-tighter af-gradient-text uppercase">AgentForge</h1>
+      {/* Main Container */}
+      <div className="flex-1 flex flex-col relative min-w-0">
+        
+        {/* Top Header */}
+        <header className="h-16 md:h-20 px-6 md:px-10 flex justify-between items-center border-b border-[var(--border)] glass sticky top-0 z-50">
+          <div className="flex items-center gap-4 truncate">
+            <h1 className="text-base md:text-xl font-black tracking-tighter af-gradient-text uppercase">AgentForge</h1>
             {currentProject && (
-              <span className="text-[9px] px-3 py-1 bg-[#007BFF]/10 border border-[#007BFF]/20 rounded-full text-[#007BFF] uppercase tracking-widest font-black">
-                {currentProject.status}
-              </span>
+              <div className="flex items-center gap-2 overflow-hidden">
+                <ChevronRight className="w-4 h-4 text-slate-600 shrink-0" />
+                <span className="text-xs font-bold text-slate-500 truncate max-w-[150px] md:max-w-md">{currentProject.idea_raw}</span>
+              </div>
             )}
           </div>
-          {currentProject?.status === 'ready' && view === 'editor' && (
-            <button 
-              onClick={() => downloadFullProject(currentProject)}
-              className="px-6 py-2 bg-[#007BFF] text-white rounded-lg text-xs font-bold flex items-center gap-2 hover:scale-105 transition-all shadow-[0_0_20px_rgba(0,123,255,0.3)]"
-            >
-              <Download className="w-4 h-4" /> EXPORT FULL
-            </button>
-          )}
+          <div className="flex items-center gap-3">
+            {currentProject && (currentProject.status === 'ready' || currentProject.artifacts.length > 0) && (
+              <button 
+                onClick={() => exportProject(currentProject)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all shadow-lg shadow-blue-600/20"
+              >
+                <FileOutput className="w-4 h-4" />
+                <span className="hidden sm:inline">Export complet</span>
+              </button>
+            )}
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 text-emerald-500 rounded-full text-[10px] font-black uppercase tracking-widest border border-emerald-500/20">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="hidden sm:inline">System Live</span>
+            </div>
+          </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-10 custom-scrollbar">
-          {view === 'history' ? (
-            <div className="max-w-6xl mx-auto space-y-12 animate-in fade-in">
-              <div className="space-y-2">
-                <h2 className="text-5xl font-black tracking-tighter">Mes Projets</h2>
-                <p className="text-zinc-500 italic">Historique des forges terminées et en cours.</p>
+        <main className="flex-1 overflow-y-auto p-4 md:p-10 custom-scrollbar relative z-10">
+          
+          {/* View: Landing (Create) */}
+          {view === 'landing' && (
+            <div className="max-w-4xl mx-auto mt-12 md:mt-24 space-y-16 animate-in fade-in zoom-in-95">
+              <div className="text-center space-y-6">
+                <div className="inline-flex px-4 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-500 text-[10px] font-black uppercase tracking-[0.3em] mb-4">
+                  Ingénierie de Produit Multi-Agent
+                </div>
+                <h2 className="text-5xl md:text-8xl font-black tracking-tighter leading-none af-gradient-text">Forge ta vision.</h2>
+                <p className="text-slate-500 text-lg md:text-xl max-w-2xl mx-auto font-light leading-relaxed px-4">
+                  Transformez une idée brute en une architecture logicielle complète, validée par un collège d'experts IA.
+                </p>
               </div>
 
-              {projects.length === 0 ? (
-                <div className="py-20 text-center border-2 border-dashed border-white/5 rounded-[40px] text-zinc-600 font-bold uppercase tracking-widest text-sm">
-                   Aucun projet.
+              <form onSubmit={createProject} className="relative group max-w-3xl mx-auto px-4">
+                <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-blue-400 rounded-[32px] blur opacity-20 group-focus-within:opacity-40 transition duration-1000"></div>
+                <div className="relative flex items-center bg-[var(--bg-secondary)] border border-[var(--border)] rounded-[28px] p-2 md:p-3 shadow-2xl">
+                  <input 
+                    type="text" 
+                    placeholder="Quelle est votre idée de produit ?" 
+                    className="bg-transparent border-none outline-none flex-1 py-4 md:py-5 px-6 text-base md:text-xl text-[var(--text-primary)] placeholder-slate-500 font-medium"
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                  />
+                  <button type="submit" className="hidden md:flex px-8 py-5 bg-blue-600 text-white rounded-[22px] items-center gap-3 font-black uppercase tracking-widest hover:brightness-110 active:scale-95 transition-all shadow-lg">
+                    Démarrer <ArrowRight className="w-5 h-5" />
+                  </button>
+                  <button type="submit" className="md:hidden w-12 h-12 bg-blue-600 text-white rounded-full flex items-center justify-center shrink-0">
+                    <ArrowRight className="w-5 h-5" />
+                  </button>
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 gap-6 pb-20">
-                  {projects.map(p => (
-                    <div 
-                      key={p.id} 
-                      onClick={() => { setActiveProjectId(p.id); setView('editor'); }}
-                      className="group bg-[#18181b] border border-white/5 rounded-[32px] p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-8 cursor-pointer hover:border-[#007BFF]/40 transition-all"
-                    >
-                      <div className="space-y-4 flex-1">
-                        <div className="flex items-center gap-3">
-                           <div className={`w-3 h-3 rounded-full ${p.status === 'ready' ? 'bg-green-500' : 'bg-[#007BFF]'}`} />
-                           <h3 className="text-2xl font-bold group-hover:text-[#007BFF] transition-colors line-clamp-1">{p.idea_raw}</h3>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                           {p.artifacts.map(art => (
-                             <div key={art.id} className="px-3 py-1 bg-white/5 rounded-full text-[9px] font-black uppercase tracking-tighter text-zinc-400">
-                                {art.role.split(' ')[0]}
-                             </div>
-                           ))}
-                           {p.status !== 'ready' && <div className="px-3 py-1 bg-[#007BFF]/10 text-[#007BFF] rounded-full text-[9px] font-black animate-pulse">EN COURS</div>}
-                        </div>
+              </form>
+            </div>
+          )}
+
+          {/* View: Editor (Workspace) */}
+          {view === 'editor' && currentProject && (
+            <div className="max-w-7xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              
+              {/* Project Status Bar */}
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 p-8 bg-[var(--bg-secondary)] border border-[var(--border)] rounded-[32px] shadow-sm">
+                <div className="flex items-center gap-5">
+                   <div className="w-14 h-14 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-500">
+                      {currentProject.status === 'ready' ? <Box className="w-7 h-7" /> : <Loader2 className="w-7 h-7 animate-spin" />}
+                   </div>
+                   <div>
+                      <h3 className="text-xl font-black">{currentProject.currentStep}</h3>
+                      <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Workspace Actif • {currentProject.artifacts.length} Documents Forgés</p>
+                   </div>
+                </div>
+                {currentProject.status === 'clarifying' && currentProject.questions.length > 0 && (
+                  <div className="px-6 py-3 bg-blue-600 text-white rounded-full text-[10px] font-black uppercase tracking-widest animate-pulse">
+                    Action Requise : Cadrage Stratégique
+                  </div>
+                )}
+              </div>
+
+              {/* Clarification Phase */}
+              {currentProject.status === 'clarifying' && currentProject.questions.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in slide-in-from-bottom-8">
+                  {currentProject.questions.map(q => (
+                    <div key={q.id} className="p-8 bg-[var(--bg-secondary)] border border-[var(--border)] rounded-[32px] space-y-4 hover:border-blue-500/40 transition-all group">
+                      <div className="flex items-center gap-3 text-blue-500">
+                        <MessageSquare className="w-4 h-4" />
+                        <span className="text-[10px] font-black uppercase tracking-widest">Expert Consultation</span>
                       </div>
-                      <div className="flex items-center gap-4 shrink-0">
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); downloadFullProject(p); }}
-                          className="px-5 py-2.5 bg-white/5 rounded-xl text-xs font-bold hover:bg-[#007BFF] transition-all"
-                        >
-                          <Download className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={(e) => handleDeleteProject(p.id, e)}
-                          className="p-3 text-zinc-600 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
-                        >
-                          <Trash2 className="w-5 h-5" />
-                        </button>
-                        <ChevronRight className="w-6 h-6 text-zinc-700 group-hover:text-[#007BFF] transition-all" />
-                      </div>
+                      <p className="font-bold text-lg leading-snug">{q.text}</p>
+                      <input 
+                        className="w-full bg-[var(--bg-primary)] border border-[var(--border)] rounded-2xl p-4 text-sm focus:border-blue-500 outline-none transition-all group-hover:border-blue-500/30"
+                        placeholder="Votre réponse ici..."
+                        value={currentProject.answers[q.id] || ''}
+                        onChange={(e) => {
+                          const newAns = { ...currentProject.answers, [q.id]: e.target.value };
+                          updateCurrentProject({ answers: newAns });
+                        }}
+                      />
                     </div>
                   ))}
+                  <div className="md:col-span-2">
+                    <button 
+                      onClick={handleLaunchForge}
+                      className="w-full py-7 bg-blue-600 text-white rounded-[24px] font-black uppercase tracking-widest shadow-2xl hover:brightness-110 active:scale-[0.99] transition-all"
+                    >
+                      Lancer la Forge de Documents
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Artifacts Grid */}
+              {(currentProject.status === 'generating' || currentProject.status === 'ready') && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-32">
+                   {currentProject.artifacts.map((art, idx) => (
+                     <ArtifactCard 
+                       key={art.id} 
+                       artifact={art} 
+                       delay={idx * 50} 
+                       onClick={() => setSelectedArtifact(art)} 
+                     />
+                   ))}
+                   {currentProject.status === 'generating' && (
+                     <div className="h-[300px] border-2 border-dashed border-[var(--border)] rounded-[28px] flex flex-col items-center justify-center gap-4 text-slate-500 animate-pulse bg-slate-500/5">
+                        <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                        <span className="text-[10px] font-black uppercase tracking-widest">Calcul Expert...</span>
+                     </div>
+                   )}
                 </div>
               )}
             </div>
-          ) : (
-            <>
-              {(!currentProject || (currentProject.status === 'idle' && !activeProjectId)) && (
-                <div className="max-w-4xl mx-auto mt-20 space-y-16 animate-in fade-in duration-700">
-                  <div className="space-y-6 text-center">
-                    <h2 className="text-8xl font-black tracking-tighter af-gradient-text leading-[0.9]">Forge Ta Vision.</h2>
-                    <p className="text-zinc-500 text-xl max-w-2xl mx-auto font-light">Une suite d'experts IA pour transformer une idée en blueprint technique.</p>
-                  </div>
-                  <div className="space-y-12">
-                    <form onSubmit={handleStartClarification} className="relative group">
-                      <div className="absolute -inset-1 bg-gradient-to-r from-[#007BFF] to-[#0056B3] rounded-[32px] blur opacity-20 group-focus-within:opacity-40 transition duration-1000"></div>
-                      <div className="relative flex items-center bg-[#09090b] border border-white/10 rounded-[30px] p-3 pl-8 focus-within:border-[#007BFF] transition-all shadow-2xl">
-                        <input 
-                          type="text" 
-                          placeholder="Décris ton idée..." 
-                          className="bg-transparent border-none outline-none flex-1 py-5 text-xl text-white placeholder-zinc-700"
-                          value={inputValue}
-                          onChange={(e) => setInputValue(e.target.value)}
-                        />
-                        <button type="submit" className="px-8 py-5 bg-[#007BFF] text-white rounded-[24px] flex items-center gap-3 font-black uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-lg">
-                          Générer <ArrowRight className="w-5 h-5" />
+          )}
+
+          {/* View: History */}
+          {view === 'history' && (
+            <div className="max-w-5xl mx-auto space-y-12 animate-in fade-in">
+              <div className="flex justify-between items-end">
+                <h2 className="text-4xl font-black tracking-tighter af-gradient-text">Bibliothèque de Projets</h2>
+                <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">{projects.length} archives enregistrées</span>
+              </div>
+              <div className="grid grid-cols-1 gap-4">
+                {projects.map(p => (
+                  <div 
+                    key={p.id}
+                    onClick={() => { setActiveProjectId(p.id); setView('editor'); }}
+                    className="p-6 md:p-8 bg-[var(--bg-secondary)] border border-[var(--border)] rounded-[32px] flex flex-col md:flex-row justify-between items-center gap-6 cursor-pointer hover:border-blue-500/30 group transition-all"
+                  >
+                    <div className="flex items-center gap-6 flex-1 min-w-0">
+                      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 ${p.status === 'ready' ? 'bg-green-500/10 text-green-500' : 'bg-blue-500/10 text-blue-500'}`}>
+                        {p.status === 'ready' ? <Box className="w-7 h-7" /> : <Zap className="w-7 h-7" />}
+                      </div>
+                      <div className="truncate">
+                        <h4 className="font-bold text-xl group-hover:text-blue-500 transition-colors truncate">{p.idea_raw}</h4>
+                        <div className="flex items-center gap-4 mt-1">
+                          <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">{p.artifacts.length} Assets</span>
+                          <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">• {new Date(p.createdAt).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+                      {p.artifacts.length > 0 && (
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); exportProject(p); }} 
+                          className="p-3 text-blue-500 hover:bg-blue-500/10 rounded-xl transition-all"
+                          title="Exporter ce projet"
+                        >
+                          <FileOutput className="w-5 h-5" />
                         </button>
-                      </div>
-                    </form>
-                    <div className="grid grid-cols-3 gap-6">
-                      {PACKS.map(p => (
-                        <div key={p.id} className="p-8 rounded-[32px] border border-white/5 bg-white/[0.02] flex flex-col gap-6 text-zinc-500 group transition-all hover:bg-white/[0.04]">
-                          <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center group-hover:bg-[#007BFF]/10 group-hover:text-[#007BFF] transition-all">
-                            {p.icon}
-                          </div>
-                          <div className="space-y-1">
-                            <div className="text-sm font-black uppercase tracking-widest text-zinc-400">{p.name}</div>
-                            <div className="text-xs uppercase opacity-40">{p.desc}</div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {currentProject?.status === 'clarifying' && (
-                <div className="max-w-2xl mx-auto py-10 space-y-12 animate-in slide-in-from-bottom-8">
-                   <div className="text-center space-y-4">
-                    <h3 className="text-5xl font-black tracking-tighter af-gradient-text">Cadrage Produit</h3>
-                    <p className="text-zinc-500 font-medium italic">Répondez aux experts pour orienter la génération.</p>
-                   </div>
-                  
-                  {currentProject.questions.length === 0 ? (
-                    <div className="flex flex-col items-center gap-6 py-24 bg-white/[0.02] rounded-[40px] border border-white/5 animate-pulse">
-                      <Loader2 className="w-12 h-12 text-[#007BFF] animate-spin" />
-                      <span className="text-xs font-black uppercase tracking-[0.4em] text-zinc-500">L'Agent analyse ton idée...</span>
-                    </div>
-                  ) : (
-                    <div className="space-y-8 pb-20">
-                      {currentProject.questions.map(q => (
-                        <div key={q.id} className="p-10 bg-[#18181b] border border-white/5 rounded-[40px] space-y-6 focus-within:border-[#007BFF]/40 transition-all shadow-2xl relative overflow-hidden">
-                          <div className="absolute top-0 right-0 p-4 opacity-5">
-                             <FileText className="w-20 h-20" />
-                          </div>
-                          <div className="text-xl font-bold leading-tight relative z-10 text-white">
-                            {q.text}
-                          </div>
-                          <input 
-                            type="text" 
-                            className="w-full bg-black/40 border border-white/5 rounded-2xl p-6 text-white focus:border-[#007BFF] outline-none transition-all placeholder-zinc-700"
-                            placeholder="Écrivez ici..."
-                            value={currentProject.answers[q.id] || ''}
-                            onChange={(e) => {
-                              const newAnswers = { ...currentProject.answers, [q.id]: e.target.value };
-                              updateCurrentProject({ answers: newAnswers });
-                            }}
-                          />
-                        </div>
-                      ))}
+                      )}
                       <button 
-                        onClick={handleLaunchForge} 
-                        className="w-full py-7 bg-[#007BFF] text-white rounded-[32px] font-black uppercase tracking-[0.2em] text-base hover:brightness-110 hover:scale-[1.02] active:scale-100 transition-all shadow-2xl"
+                        onClick={(e) => handleDelete(p.id, e)} 
+                        className="p-3 text-slate-500 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
                       >
-                        Lancer la Forge Multi-Agents
+                        <Trash2 className="w-5 h-5" />
                       </button>
+                      <ChevronRight className="w-6 h-6 text-slate-400 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
                     </div>
-                  )}
-                </div>
-              )}
-
-              {(currentProject?.status === 'generating' || currentProject?.status === 'ready') && (
-                <div className="max-w-7xl mx-auto space-y-12 pb-32">
-                  {currentProject.status === 'generating' && (
-                    <div className="sticky top-4 z-30 bg-[#18181b]/80 backdrop-blur-2xl py-8 px-10 rounded-[32px] border border-white/10 flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl animate-in slide-in-from-top-4">
-                      <div className="flex items-center gap-6">
-                        <div className="w-14 h-14 rounded-2xl bg-[#007BFF]/10 flex items-center justify-center">
-                          <Loader2 className="w-7 h-7 text-[#007BFF] animate-spin" />
-                        </div>
-                        <div className="space-y-1">
-                           <div className="text-2xl font-black tracking-tight">{currentProject.currentStep}</div>
-                           <div className="text-[10px] font-black uppercase tracking-[0.3em] text-[#007BFF]">Progression: {currentProject.artifacts.length} / 10</div>
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        {[...Array(10)].map((_, i) => (
-                          <div key={i} className={`w-8 h-2 rounded-full transition-all duration-700 ${i < currentProject.artifacts.length ? 'bg-[#007BFF]' : 'bg-white/5'}`} />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 animate-in fade-in zoom-in-95 duration-700">
-                    {currentProject.artifacts.map((a, i) => (
-                      <ArtifactCard key={a.id} artifact={a} delay={i * 80} onClick={() => setSelectedArtifact(a)} />
-                    ))}
-                    {currentProject.status === 'generating' && (
-                      <div className="h-[320px] rounded-[32px] border-2 border-dashed border-white/5 flex flex-col items-center justify-center gap-4 text-zinc-700 animate-pulse">
-                         <Loader2 className="w-6 h-6 animate-spin opacity-20" />
-                         <span className="text-[9px] font-black uppercase tracking-widest opacity-40">Prochain Agent...</span>
-                      </div>
-                    )}
                   </div>
-                </div>
-              )}
-            </>
+                ))}
+                {projects.length === 0 && (
+                  <div className="text-center py-24 border-2 border-dashed border-[var(--border)] rounded-[40px] text-slate-500 font-bold uppercase tracking-widest text-sm opacity-50 flex flex-col items-center gap-4">
+                    <FileText className="w-12 h-12 mb-2" />
+                    Aucun projet archivé.
+                  </div>
+                )}
+              </div>
+            </div>
           )}
         </main>
       </div>
 
-      <SideDrawer artifact={selectedArtifact} onClose={() => setSelectedArtifact(null)} onRefine={handleRefine} />
+      <SideDrawer 
+        artifact={selectedArtifact} 
+        onClose={() => setSelectedArtifact(null)} 
+        onRefine={handleRefine} 
+      />
     </div>
   );
 };

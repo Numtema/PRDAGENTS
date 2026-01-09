@@ -1,24 +1,6 @@
 
-import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
-import { z } from "zod";
-import { PocketStore, ExpertRole, Artifact, ArtifactType, ProjectMode, ProjectLanguage } from "../types";
-
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
-// --- Schemas ---
-const IntentSchema = z.object({
-  goal: z.string().default("Vision Produit"),
-  target: z.string().default("Utilisateurs"),
-  constraints: z.array(z.string()).default([])
-});
-
-const AppMapSchema = z.object({
-  modules: z.array(z.object({
-    name: z.string(),
-    description: z.string(),
-    features: z.array(z.string())
-  })).default([])
-});
+import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
+import { PocketStore, ExpertRole, Artifact, ArtifactType } from "../types";
 
 // --- Helpers ---
 function safeJsonParse(text: string): any {
@@ -33,172 +15,151 @@ function safeJsonParse(text: string): any {
   }
 }
 
-async function withRetry<T>(fn: () => Promise<T>, retries = 5): Promise<T> {
+async function withRetry<T>(fn: () => Promise<T>, retries = 3): Promise<T> {
   let lastErr: any;
   for (let i = 0; i < retries; i++) {
-    try { 
-      return await fn(); 
-    } catch (e: any) { 
+    try { return await fn(); } catch (e: any) { 
       lastErr = e;
-      const waitTime = Math.pow(2, i) * 1000 + Math.random() * 500;
-      await new Promise(r => setTimeout(r, waitTime)); 
+      await new Promise(r => setTimeout(r, 1000 * Math.pow(2, i))); 
     }
   }
   throw lastErr;
 }
 
-// --- Agent Forge Flow ---
-
+// --- Clarification Node ---
 export async function clarifyNode(idea: string, emit: (u: Partial<PocketStore>) => void) {
-  emit({ currentStep: "Analyse des zones d'ombre...", status: "clarifying" });
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  emit({ currentStep: "L'Agent Clarificateur analyse votre vision...", status: 'clarifying' });
+
   const res = await withRetry(() => ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: `Tu es l'Agent de Clarification d'AgentForge. Ton but est de poser des questions pour lever les ambiguïtés sur cette idée : "${idea}". 
-    Génère 3 à 5 questions précises. 
-    RETOURNE UNIQUEMENT UN JSON avec ce format exact:
-    { "questions": [ { "id": "q1", "text": "Quelle est la question ?", "type": "text" } ] }`,
+    contents: `Tu es l'Expert de Cadrage d'AgentForge. Ton but est de poser 4 questions stratégiques pour lever les ambiguïtés sur cette idée : "${idea}".
+    Retourne UNIQUEMENT un JSON: { "questions": [{ "id": "q1", "text": "...", "type": "text" }] }`,
     config: { responseMimeType: "application/json" }
   })) as GenerateContentResponse;
-  
+
   const data = safeJsonParse(res.text || "{}");
-  const questions = (data.questions || []).map((q: any, i: number) => ({
-    id: q.id || `q${i}`,
-    text: typeof q === 'string' ? q : (q.text || "Question manquante"),
-    type: q.type || 'text'
-  }));
-  
-  emit({ questions });
-  return { questions };
+  emit({ questions: data.questions || [] });
 }
 
-export async function buildFoundations(shared: PocketStore, emit: (u: Partial<PocketStore>) => void) {
-  emit({ currentStep: "Construction du Manifeste...", status: "generating" });
-  
-  const intentRes = await withRetry(() => ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: `Projet: ${shared.idea_raw}. Réponses: ${JSON.stringify(shared.answers)}. Synthétise le but, la cible et les contraintes en JSON strict.`,
-    config: { responseMimeType: "application/json" }
-  })) as GenerateContentResponse;
-  
-  let intentRaw = safeJsonParse(intentRes.text || "{}");
-  if (Array.isArray(intentRaw)) intentRaw = intentRaw[0] || {};
-  const intent = IntentSchema.parse(intentRaw);
-  
-  const mapRes = await withRetry(() => ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: `Pack: ${shared.mode}. Intent: ${JSON.stringify(intent)}. Cartographie 4 modules clés en JSON.`,
-    config: { responseMimeType: "application/json" }
-  })) as GenerateContentResponse;
-  
-  let mapRaw = safeJsonParse(mapRes.text || "{}");
-  if (Array.isArray(mapRaw)) mapRaw = { modules: mapRaw };
-  const app_map = AppMapSchema.parse(mapRaw);
-  
-  emit({ intent, app_map });
-  return { intent, app_map };
-}
-
+// --- Expert Logic ---
 async function expertNode(role: ExpertRole, shared: PocketStore): Promise<Artifact> {
-  let task = "";
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   let type: ArtifactType = 'text';
+  let roleSpecificPrompt = "";
 
-  switch (role) {
-    case ExpertRole.STRATEGIST: 
-      type = 'vitals'; 
-      task = "Analyse stratégique globale. Estime le Time-to-Market, la complexité technique (1-10), le risque de sécurité (low/medium/high) et le budget cloud estimé. Retourne JSON: { 'title': '...', 'summary': '...', 'content': '...', 'vitals': { 'timeToMarket': '3 mois', 'complexity': 7, 'securityRisk': 'medium', 'estimatedBudget': '500€/mois' } }";
-      break;
-    case ExpertRole.AUDITOR:
-      type = 'audit';
-      task = `Analyse de cohérence. Relis les documents précédents : ${shared.artifacts.map(a => a.title).join(', ')}. Trouve 3 à 5 contradictions ou manques techniques.
-      Retourne JSON: { "title": "Audit d'Intégrité", "summary": "Analyse de cohérence multi-experts.", "content": "Markdown...", "audit": { "status": "pass|warning|fail", "findings": [{ "type": "conflict|missing|risk", "text": "Description...", "severity": "low|medium|high" }] } }`;
-      break;
-    case ExpertRole.MARKET: type = 'market-analysis'; task = "Marché et USP."; break;
-    case ExpertRole.PRODUCT: type = 'text'; task = "PRD et User Stories."; break;
-    case ExpertRole.UX: type = 'ux-flow'; task = "Mermaid UX Flow."; break;
-    case ExpertRole.ARCHITECT: type = 'prototype'; task = "Architecture Mermaid C4."; break;
-    case ExpertRole.API: type = 'api-spec'; task = "Endpoints OpenAPI."; break;
-    case ExpertRole.SECURITY: type = 'security-spec'; task = "Audit de sécurité."; break;
-    case ExpertRole.DATA: type = 'data-schema'; task = "Schéma ERD Mermaid."; break;
-    case ExpertRole.QA: type = 'test-strategy'; task = "Plan de test QA."; break;
-    case ExpertRole.DELIVERY: type = 'roadmap'; task = "Roadmap V1."; break;
-    default: task = "Expertise métier.";
+  if (role === ExpertRole.ARCHITECT) type = 'prototype';
+  if (role === ExpertRole.DATA) type = 'data-schema';
+  if (role === ExpertRole.AUDITOR) type = 'audit';
+  if (role === ExpertRole.COMPONENTS) {
+    type = 'design-system';
+    roleSpecificPrompt = "Génère un Design System minimal (Palette, Typo) et une liste de COMPOSANTS UI réutilisables avec leur description technique et code Tailwind exemplaire.";
   }
 
+  let instructions = `Tu es l'expert ${role}. Analyse le projet: ${shared.idea_raw}. Intent: ${JSON.stringify(shared.intent)}. ${roleSpecificPrompt}`;
+
   const res = await withRetry(() => ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: `Expert: ${role}. Contexte: ${JSON.stringify(shared.intent)}. Tâche: ${task}. Documents actuels: ${shared.artifacts.length}. Retourne JSON: { "title": "...", "summary": "...", "content": "Markdown...", "vitals": { ... }, "audit": { ... } }`,
+    contents: `${instructions} Génère un document stratégique exhaustif. Propose toujours 2 VARIANTES (A vs B).
+    INCLUS DES DIAGRAMMES MERMAID SI NÉCESSAIRE (Gantt, C4, Sequence, ERD, Quadrant).
+    RETOURNE UN JSON: { "title": "...", "summary": "...", "content": "Markdown...", "vitals": {...}, "audit": {...}, "variants": [...] }`,
     config: { responseMimeType: "application/json" }
   })) as GenerateContentResponse;
 
   const json = safeJsonParse(res.text || "{}");
   return {
-    id: `${role.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}`,
+    id: `${role}_${Date.now()}`,
     role,
     title: json.title || role,
-    summary: json.summary || "Synthèse expert.",
+    summary: json.summary || "Synthèse de l'expert.",
     content: json.content || res.text || "",
     type,
     confidence: 0.95 + Math.random() * 0.04,
     vitals: json.vitals,
-    audit: json.audit
+    audit: json.audit,
+    variants: json.variants
   };
 }
 
-export async function runAgentForge(
-  shared: PocketStore,
-  emit: (u: Partial<PocketStore>) => void
-) {
+// --- Forge Orchestration ---
+export async function runAgentForge(shared: PocketStore, emit: (u: Partial<PocketStore>) => void) {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   try {
-    const foundations = await buildFoundations(shared, emit);
-    let currentArtifacts: Artifact[] = [];
+    emit({ currentStep: "Extraction de l'Intention...", status: 'generating' });
+    
+    // 1. Build Foundations (Intent)
+    const intentRes = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: `Projet: ${shared.idea_raw}. Réponses: ${JSON.stringify(shared.answers)}. Extrais le but, la cible et les contraintes en JSON.`,
+      config: { responseMimeType: "application/json" }
+    });
+    const intent = safeJsonParse(intentRes.text || "{}");
+    emit({ intent });
 
+    // 2. Map Modules
+    const mapRes = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: `Intent: ${JSON.stringify(intent)}. Cartographie 4 modules clés en JSON: { "modules": [{ "name": "", "description": "", "features": [] }] }`,
+      config: { responseMimeType: "application/json" }
+    });
+    const app_map = safeJsonParse(mapRes.text || "{}");
+    emit({ app_map });
+
+    // 3. Sequential Experts
+    let artifacts: Artifact[] = [];
     const experts = [
-      ExpertRole.STRATEGIST, ExpertRole.MARKET, ExpertRole.PRODUCT, 
-      ExpertRole.UX, ExpertRole.ARCHITECT, ExpertRole.API, 
-      ExpertRole.DATA, ExpertRole.SECURITY, ExpertRole.QA, ExpertRole.DELIVERY,
-      ExpertRole.AUDITOR // L'auditeur passe en dernier pour tout vérifier
+      ExpertRole.STRATEGIST, 
+      ExpertRole.MARKET, 
+      ExpertRole.PRODUCT, 
+      ExpertRole.COMPONENTS, // New Expert Node
+      ExpertRole.UX, 
+      ExpertRole.ARCHITECT, 
+      ExpertRole.DATA, 
+      ExpertRole.SECURITY, 
+      ExpertRole.DELIVERY, 
+      ExpertRole.AUDITOR
     ];
 
     for (const role of experts) {
       emit({ currentStep: `L'expert ${role} forge sa partie...` });
-      const newArtifact = await expertNode(role, { ...shared, ...foundations, artifacts: currentArtifacts });
-      currentArtifacts = [...currentArtifacts, newArtifact];
-      emit({ artifacts: currentArtifacts });
-      await new Promise(r => setTimeout(r, 600)); 
+      const art = await expertNode(role, { ...shared, intent, app_map, artifacts });
+      artifacts = [...artifacts, art];
+      emit({ artifacts });
+      await new Promise(r => setTimeout(r, 500));
     }
-    
-    emit({ currentStep: "Génération du prototype visuel...", status: "generating" });
-    const synthRes = await withRetry(() => ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: `Génère un prototype HTML/Tailwind complet pour : ${shared.idea_raw}. En te basant sur l'audit : ${JSON.stringify(currentArtifacts.find(a => a.type === 'audit')?.audit)}.`,
-    })) as GenerateContentResponse;
 
+    // 4. Synthesis / Prototype
+    emit({ currentStep: "Génération du Prototype Interactif..." });
+    const protoRes = await ai.models.generateContent({
+      model: 'gemini-3-pro-preview',
+      contents: `Génère un prototype HTML/Tailwind complet pour: ${shared.idea_raw}. Base-toi sur les intentions: ${JSON.stringify(intent)}. Style épuré, responsive, composants modernes.`,
+    });
+    
     const proto: Artifact = {
       id: `proto_${Date.now()}`,
       role: ExpertRole.PROTOTYPER,
       title: 'Prototype Maître',
-      summary: 'Interface interactive générée à partir du backlog.',
-      content: (synthRes.text || "").replace(/```html/g, "").replace(/```/g, "").trim(),
+      summary: 'Interface fonctionnelle générée.',
+      content: (protoRes.text || "").replace(/```html/g, "").replace(/```/g, "").trim(),
       type: 'prototype',
       confidence: 1.0
     };
 
-    emit({ artifacts: [...currentArtifacts, proto], status: "ready" });
+    emit({ artifacts: [...artifacts, proto], status: 'ready', currentStep: 'Forge Terminée' });
   } catch (err: any) {
-    emit({ status: "error", currentStep: `Erreur Forge: ${err.message}` });
+    emit({ status: 'error', currentStep: `Erreur: ${err.message}` });
   }
 }
 
-export async function refineArtifactNode(
-  artifact: Artifact, 
-  instruction: string, 
-  shared: PocketStore, 
-  emit: (u: Partial<PocketStore>) => void
-) {
+// --- Refinement Node ---
+export async function refineArtifactNode(artifact: Artifact, instruction: string, shared: PocketStore, emit: (u: Partial<PocketStore>) => void) {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   emit({ currentStep: `Mise à jour de ${artifact.title}...` });
+
   const res = await withRetry(() => ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: `Artefact: ${artifact.content}. Instruction: ${instruction}. Réécris en Markdown. Retourne JSON: { "title": "...", "summary": "...", "content": "..." }`,
+    contents: `Expert ${artifact.role}. Document original: ${artifact.content}. Instruction de modification: ${instruction}. Réécris en conservant les diagrammes Mermaid.
+    RETOURNE UN JSON: { "title": "...", "content": "Markdown...", "summary": "..." }`,
     config: { responseMimeType: "application/json" }
   })) as GenerateContentResponse;
 
@@ -206,5 +167,4 @@ export async function refineArtifactNode(
   const updated = { ...artifact, ...json };
   const newArtifacts = shared.artifacts.map(a => a.id === artifact.id ? updated : a);
   emit({ artifacts: newArtifacts });
-  return updated;
 }

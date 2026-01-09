@@ -15,7 +15,8 @@ export enum ExpertRole {
   WRITER = 'Technical Writer',
   PROTOTYPER = 'Synthesis Expert',
   STRATEGIST = 'Strategy Auditor',
-  AUDITOR = 'Integrity Auditor'
+  AUDITOR = 'Integrity Auditor',
+  COMPONENTS = 'UI Component Expert'
 }
 
 export type ArtifactType = 
@@ -31,7 +32,15 @@ export type ArtifactType =
   | 'test-strategy'
   | 'persona-profile'
   | 'vitals'
-  | 'audit';
+  | 'audit'
+  | 'design-system';
+
+export interface ArtifactVariant {
+  id: string;
+  label: string;
+  description: string;
+  content: string;
+}
 
 export interface Artifact {
   id: string;
@@ -51,6 +60,7 @@ export interface Artifact {
     status: 'pass' | 'warning' | 'fail';
     findings: { type: 'conflict' | 'missing' | 'risk'; text: string; severity: 'low' | 'medium' | 'high' }[];
   };
+  variants?: ArtifactVariant[];
 }
 
 export interface Question {

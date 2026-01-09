@@ -1,76 +1,79 @@
 
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AgentForge | Usine à Documentation Produit & Tech</title>
+    <title>AgentForge | Product Engineering Platform</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script type="module" src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              primary: '#007BFF',
+              surface: {
+                light: '#f8fafc',
+                dark: '#0f172a'
+              },
+              card: {
+                light: '#ffffff',
+                dark: '#1e293b'
+              }
+            }
+          }
+        }
+      }
+    </script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Fira+Code:wght@300..700&display=swap');
 
         :root {
-            --af-blue: #007BFF;
-            --af-blue-dark: #0056B3;
-            --af-orange: #FF8C00;
-            --af-surface: #09090b;
-            --af-card: #18181b;
-            --af-border: rgba(255, 255, 255, 0.1);
-            --af-text: #E6E1E5;
+            --bg-primary: #f8fafc;
+            --bg-secondary: #ffffff;
+            --text-primary: #0f172a;
+            --text-secondary: #475569;
+            --border: #e2e8f0;
+            --accent: #007BFF;
+        }
+
+        [data-theme='dark'] {
+            --bg-primary: #09090b;
+            --bg-secondary: #18181b;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --border: #27272a;
+            --accent: #3b82f6;
         }
 
         body {
             font-family: 'Inter', sans-serif;
-            background-color: var(--af-surface);
-            color: var(--af-text);
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            transition: background-color 0.3s ease, color 0.3s ease;
             margin: 0;
-            overflow: hidden;
+            overflow-x: hidden;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+        
+        .glass {
+          background: rgba(255, 255, 255, 0.03);
+          backdrop-filter: blur(12px);
+          border: 1px solid rgba(255, 255, 255, 0.05);
         }
 
         .af-gradient-text {
-            background: linear-gradient(135deg, #FFF 0%, var(--af-blue) 100%);
+            background: linear-gradient(135deg, var(--text-primary) 30%, var(--accent) 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
-        .m3-card {
-            background: var(--af-card);
-            border: 1px solid var(--af-border);
-            border-radius: 24px;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .m3-card:hover {
-            border-color: var(--af-blue);
-            box-shadow: 0 0 20px rgba(0, 123, 255, 0.15);
-            transform: translateY(-2px);
-        }
-
-        .m3-button-primary {
-            background: var(--af-blue);
-            color: white;
-            border-radius: 16px;
-            font-weight: 700;
-            transition: all 0.2s;
-        }
-
-        .m3-button-primary:hover {
-            background: var(--af-blue-dark);
-            transform: scale(1.02);
-            box-shadow: 0 0 15px rgba(0, 123, 255, 0.4);
-        }
-
-        /* Custom Scrollbar */
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: var(--af-border); border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: var(--af-blue); }
-
         pre { font-family: 'Fira Code', monospace; }
-        
-        /* Mermaid styling */
-        .mermaid { background: transparent; display: flex; justify-content: center; padding: 20px; border-radius: 12px; }
+        .mermaid { background: transparent; display: flex; justify-content: center; width: 100%; }
     </style>
 <script type="importmap">
 {
@@ -85,7 +88,7 @@
 }
 </script>
 </head>
-<body>
+<body class="selection:bg-blue-500/30">
     <div id="root"></div>
 </body>
 </html>
