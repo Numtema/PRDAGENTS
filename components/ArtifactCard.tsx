@@ -5,7 +5,7 @@ import {
   Shield, Code, Layout, Database, Terminal, 
   Target, Rocket, Zap, Users, Globe, Cpu, FileText, 
   Activity, Clock, ScanSearch, ShieldCheck, ShieldAlert,
-  ChevronRight
+  ChevronRight, MessageSquare, Layers
 } from 'lucide-react';
 
 interface ArtifactCardProps {
@@ -15,6 +15,7 @@ interface ArtifactCardProps {
 }
 
 const getRoleIcon = (role: ExpertRole) => {
+  // Fix: Replaced nonexistent ExpertRole references and updated mapping to align with ExpertRole enum
   switch (role) {
     case ExpertRole.STRATEGIST: return <Activity className="w-5 h-5" />;
     case ExpertRole.AUDITOR: return <ScanSearch className="w-5 h-5" />;
@@ -25,15 +26,19 @@ const getRoleIcon = (role: ExpertRole) => {
     case ExpertRole.API: return <Terminal className="w-5 h-5" />;
     case ExpertRole.SECURITY: return <Shield className="w-5 h-5" />;
     case ExpertRole.DATA: return <Database className="w-5 h-5" />;
-    case ExpertRole.QA: return <ShieldCheck className="w-5 h-5" />;
-    case ExpertRole.DELIVERY: return <Rocket className="w-5 h-5" />;
+    case ExpertRole.COMPONENTS: return <Layout className="w-5 h-5" />;
     case ExpertRole.PROTOTYPER: return <Zap className="w-5 h-5" />;
+    case ExpertRole.AGENT_INITIALIZER: return <Rocket className="w-5 h-5" />;
+    case ExpertRole.INTENT: return <Layers className="w-5 h-5" />;
+    case ExpertRole.CLARIFIER: return <MessageSquare className="w-5 h-5" />;
     default: return <FileText className="w-5 h-5" />;
   }
 };
 
 const ArtifactCard: React.FC<ArtifactCardProps> = ({ artifact, delay, onClick }) => {
-  const isVitals = artifact.type === 'vitals' && artifact.vitals;
+  // Fix: Removed invalid 'artifact.type === "vitals"' check as 'vitals' is not a member of ArtifactType union. 
+  // Checked for the presence of the optional 'vitals' property instead.
+  const isVitals = !!artifact.vitals;
   const isAudit = artifact.type === 'audit' && artifact.audit;
 
   return (
@@ -95,7 +100,6 @@ const ArtifactCard: React.FC<ArtifactCardProps> = ({ artifact, delay, onClick })
         <span className={`text-[9px] font-black uppercase tracking-widest ${isVitals ? 'text-blue-200' : 'text-slate-500'}`}>
           {artifact.role}
         </span>
-        {/* Added ChevronRight icon */}
         <ChevronRight className={`w-4 h-4 transition-all ${isVitals ? 'text-white' : 'text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1'}`} />
       </footer>
     </div>

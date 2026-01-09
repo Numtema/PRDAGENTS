@@ -1,39 +1,29 @@
 
 export enum ExpertRole {
-  INTENT = 'Intent Analyst',
-  CLARIFIER = 'Clarification Agent',
-  CARTOGRAPHER = 'Product Cartographer',
-  MARKET = 'Market Analyst',
+  INTENT = 'Analyste d\'Intention',
+  CLARIFIER = 'Agent de Clarification',
+  STRATEGIST = 'Stratège Business',
+  MARKET = 'Analyste Marché',
   PRODUCT = 'Product Manager',
+  COMPONENTS = 'Expert Design System',
   UX = 'UX Researcher',
-  ARCHITECT = 'System Architect',
-  API = 'API Designer',
-  SECURITY = 'Security Analyst',
+  ARCHITECT = 'Architecte Système',
   DATA = 'Data Architect',
-  QA = 'QA Lead',
-  DELIVERY = 'Release Manager',
-  WRITER = 'Technical Writer',
-  PROTOTYPER = 'Synthesis Expert',
-  STRATEGIST = 'Strategy Auditor',
-  AUDITOR = 'Integrity Auditor',
-  COMPONENTS = 'UI Component Expert'
+  API = 'API Designer',
+  SECURITY = 'Expert Sécurité',
+  QA = 'QA Lead / Test Strategy',
+  AGENT_INITIALIZER = 'Agent d\'Intégration (AGENTS.md)',
+  AUDITOR = 'Auditeur d\'Intégrité',
+  PROTOTYPER = 'Expert Synthèse (Prototype)'
 }
 
 export type ArtifactType = 
   | 'text' 
-  | 'ui-layout' 
-  | 'data-schema' 
-  | 'ux-flow' 
   | 'prototype' 
-  | 'api-spec'
-  | 'security-spec'
-  | 'market-analysis'
-  | 'roadmap'
-  | 'test-strategy'
-  | 'persona-profile'
-  | 'vitals'
-  | 'audit'
-  | 'design-system';
+  | 'data-schema' 
+  | 'audit' 
+  | 'design-system' 
+  | 'agent-spec';
 
 export interface ArtifactVariant {
   id: string;
@@ -70,15 +60,10 @@ export interface Question {
   options?: string[];
 }
 
-export type ProjectMode = 'lite' | 'normal' | 'detailed';
-export type ProjectLanguage = 'FR' | 'EN' | 'ES' | 'DE';
-
 export interface PocketStore {
   id: string;
   idea_raw: string;
   createdAt: number;
-  mode: ProjectMode;
-  language: ProjectLanguage;
   status: 'idle' | 'clarifying' | 'generating' | 'ready' | 'error';
   currentStep: string;
   questions: Question[];
