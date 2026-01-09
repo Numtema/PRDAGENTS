@@ -34,6 +34,17 @@ const SideDrawer: React.FC<SideDrawerProps> = ({ artifact, onClose, onRefine }) 
     }
   };
 
+  const handleDownload = () => {
+    const isHtml = artifact.type === 'prototype';
+    const blob = new Blob([artifact.content], { type: isHtml ? 'text/html' : 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${artifact.title.replace(/\s+/g, '_')}.${isHtml ? 'html' : 'md'}`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <>
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] animate-in fade-in" onClick={onClose} />
@@ -48,8 +59,12 @@ const SideDrawer: React.FC<SideDrawerProps> = ({ artifact, onClose, onRefine }) 
               <span className="text-[10px] font-black uppercase tracking-widest text-[#007BFF]">{artifact.role}</span>
             </div>
           </div>
-          <button className="p-3 bg-white/5 rounded-xl hover:text-[#007BFF] transition-all">
+          <button 
+            onClick={handleDownload}
+            className="p-3 bg-white/5 rounded-xl hover:text-[#007BFF] transition-all group relative"
+          >
             <Download className="w-5 h-5" />
+            <span className="absolute -bottom-10 right-0 bg-[#007BFF] text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">Télécharger ce fichier</span>
           </button>
         </header>
 

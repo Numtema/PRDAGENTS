@@ -27,8 +27,7 @@ function safeJsonParse(text: string): any {
   const match = cleaned.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
   if (!match) return {};
   try { 
-    const parsed = JSON.parse(match[1]);
-    return parsed;
+    return JSON.parse(match[1]);
   } catch { 
     return {}; 
   }
@@ -59,8 +58,7 @@ export async function clarifyNode(idea: string, emit: (u: Partial<PocketStore>) 
     model: 'gemini-3-flash-preview',
     contents: `Tu es l'Agent de Clarification d'AgentForge. Analyse cette idée : "${idea}". 
     Génère 3 à 5 questions cruciales pour affiner le cadrage.
-    IMPORTANT: Retourne UNIQUEMENT un objet JSON valide avec la clé "questions".
-    Format: { "questions": [{ "id": "q1", "text": "...", "type": "choice/text", "options": [] }] }`,
+    IMPORTANT: Retourne UNIQUEMENT un objet JSON avec la clé "questions".`,
     config: { responseMimeType: "application/json" }
   })) as GenerateContentResponse;
   const data = safeJsonParse(res.text || "{}");
@@ -73,29 +71,21 @@ export async function buildFoundations(shared: PocketStore, emit: (u: Partial<Po
   
   const intentRes = await withRetry(() => ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: `Projet: ${shared.idea_raw}. Réponses: ${JSON.stringify(shared.answers)}. 
-    Synthétise le but, la cible et les contraintes. 
-    RETOURNE UNIQUEMENT UN OBJET JSON suivant ce format exact: 
-    { "goal": "...", "target": "...", "constraints": ["..."] }`,
+    contents: `Projet: ${shared.idea_raw}. Réponses: ${JSON.stringify(shared.answers)}. Synthétise le but, la cible et les contraintes en JSON.`,
     config: { responseMimeType: "application/json" }
   })) as GenerateContentResponse;
   
   let intentRaw = safeJsonParse(intentRes.text || "{}");
-  // Sécurité: Si l'IA renvoie un tableau au lieu de l'objet attendu
   if (Array.isArray(intentRaw)) intentRaw = intentRaw[0] || {};
   const intent = IntentSchema.parse(intentRaw);
   
   const mapRes = await withRetry(() => ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: `Pack: ${shared.mode}. Intent: ${JSON.stringify(intent)}. 
-    Cartographie les 4 modules clés de l'application.
-    RETOURNE UNIQUEMENT UN OBJET JSON suivant ce format exact: 
-    { "modules": [ { "name": "...", "description": "...", "features": ["..."] } ] }`,
+    contents: `Pack: ${shared.mode}. Intent: ${JSON.stringify(intent)}. Cartographie les 4 modules clés de l'application en JSON.`,
     config: { responseMimeType: "application/json" }
   })) as GenerateContentResponse;
   
   let mapRaw = safeJsonParse(mapRes.text || "{}");
-  // Sécurité: Si l'IA renvoie directement le tableau de modules
   if (Array.isArray(mapRaw)) mapRaw = { modules: mapRaw };
   const app_map = AppMapSchema.parse(mapRaw);
   
@@ -103,7 +93,8 @@ export async function buildFoundations(shared: PocketStore, emit: (u: Partial<Po
   return { intent, app_map };
 }
 
-async function expertNode(role: ExpertRole, shared: PocketStore, emit: (u: Partial<PocketStore>) => void) {
+// La fonction expertNode retourne maintenant l'artefact au lieu de faire l'emit lui-même
+async function expertNode(role: ExpertRole, shared: PocketStore): Promise<Artifact> {
   let type: ArtifactType = 'text';
   let task = "";
 
@@ -136,18 +127,15 @@ async function expertNode(role: ExpertRole, shared: PocketStore, emit: (u: Parti
   })) as GenerateContentResponse;
 
   const json = safeJsonParse(res.text || "{}");
-  const artifact: Artifact = {
-    id: role.toLowerCase().replace(/\s+/g, '_'),
+  return {
+    id: role.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now(),
     role,
     title: json.title || role,
     summary: json.summary || "Document généré.",
     content: json.content || res.text || "",
     type,
-    confidence: 0.98
+    confidence: 0.95 + Math.random() * 0.04
   };
-
-  emit({ artifacts: [...shared.artifacts, artifact] });
-  return artifact;
 }
 
 export async function refineArtifactNode(
@@ -162,7 +150,6 @@ export async function refineArtifactNode(
     model: 'gemini-3-flash-preview',
     contents: `Tu es un expert en raffinement. Artefact actuel : ${artifact.content}
     Instruction utilisateur : "${instruction}"
-    Réécris le document Markdown en intégrant l'instruction. Garde le même style.
     Retourne JSON: { "title": "...", "summary": "...", "content": "Markdown..." }`,
     config: { responseMimeType: "application/json" }
   })) as GenerateContentResponse;
@@ -186,6 +173,8 @@ export async function runAgentForge(
 ) {
   try {
     const foundations = await buildFoundations(shared, emit);
+    let currentArtifacts: Artifact[] = [];
+
     const experts = [
       ExpertRole.MARKET, ExpertRole.PRODUCT, ExpertRole.UX,
       ExpertRole.ARCHITECT, ExpertRole.API, ExpertRole.DATA,
@@ -194,20 +183,21 @@ export async function runAgentForge(
 
     for (const role of experts) {
       emit({ currentStep: `L'expert ${role} forge sa partie...` });
-      await expertNode(role, { ...shared, ...foundations }, emit);
-      await new Promise(r => setTimeout(r, 1500)); 
+      const newArtifact = await expertNode(role, { ...shared, ...foundations, artifacts: currentArtifacts });
+      currentArtifacts = [...currentArtifacts, newArtifact];
+      // On émet l'accumulation à chaque étape
+      emit({ artifacts: currentArtifacts });
+      await new Promise(r => setTimeout(r, 800)); 
     }
     
     emit({ currentStep: "Synthèse de la vision visuelle...", status: "generating" });
     const synthRes = await withRetry(() => ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `Génère un prototype HTML/Tailwind statique mais pro pour: ${shared.idea_raw}. 
-      Récupère les idées des artefacts : ${shared.artifacts.map(a => a.title).join(', ')}.
-      Retourne uniquement du HTML.`,
+      contents: `Génère un prototype HTML/Tailwind statique mais pro. Récupère les idées : ${currentArtifacts.map(a => a.title).join(', ')}.`,
     })) as GenerateContentResponse;
 
     const proto: Artifact = {
-      id: 'visual_synthesis',
+      id: 'visual_synthesis_' + Date.now(),
       role: ExpertRole.PROTOTYPER,
       title: 'Vision Maître',
       summary: 'Simulation visuelle du produit synthétisé.',
@@ -216,7 +206,7 @@ export async function runAgentForge(
       confidence: 1.0
     };
 
-    emit({ artifacts: [...shared.artifacts, proto], status: "ready" });
+    emit({ artifacts: [...currentArtifacts, proto], status: "ready" });
   } catch (err: any) {
     emit({ status: "error", currentStep: `Erreur: ${err.message}` });
   }

@@ -1,27 +1,18 @@
 
 export enum ExpertRole {
-  // CORE
   INTENT = 'Intent Analyst',
   CLARIFIER = 'Clarification Agent',
   CARTOGRAPHER = 'Product Cartographer',
-  
-  // STRATEGY
   MARKET = 'Market Analyst',
   PRODUCT = 'Product Manager',
   UX = 'UX Researcher',
-  
-  // TECH
   ARCHITECT = 'System Architect',
   API = 'API Designer',
   SECURITY = 'Security Analyst',
   DATA = 'Data Architect',
-  
-  // DELIVERY
   QA = 'QA Lead',
   DELIVERY = 'Release Manager',
   WRITER = 'Technical Writer',
-  
-  // SYNTHESIS
   PROTOTYPER = 'Synthesis Expert'
 }
 
@@ -45,7 +36,6 @@ export interface Artifact {
   summary: string;
   content: string;
   type: ArtifactType;
-  projection?: any;
   confidence: number;
 }
 
@@ -60,17 +50,15 @@ export type ProjectMode = 'lite' | 'normal' | 'detailed';
 export type ProjectLanguage = 'FR' | 'EN' | 'ES' | 'DE';
 
 export interface PocketStore {
+  id: string;
   idea_raw: string;
+  createdAt: number;
   mode: ProjectMode;
   language: ProjectLanguage;
   status: 'idle' | 'clarifying' | 'generating' | 'ready' | 'error';
   currentStep: string;
-  
-  // Clarification
   questions: Question[];
   answers: Record<string, string>;
-  
-  // Context
   intent?: {
     goal: string;
     target: string;
@@ -79,6 +67,5 @@ export interface PocketStore {
   app_map?: {
     modules: { name: string; description: string; features: string[] }[];
   };
-  
   artifacts: Artifact[];
 }
