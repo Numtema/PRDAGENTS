@@ -31,13 +31,15 @@ const SideDrawer: React.FC<SideDrawerProps> = ({ artifact, onClose, onRefine }) 
         theme: 'dark',
         securityLevel: 'loose',
         fontFamily: 'Inter',
-        gantt: { fontSize: 12, sectionFontSize: 14 },
-        sequence: { showSequenceNumbers: true },
+        gantt: { fontSize: 12, sectionFontSize: 14, useMaxWidth: true },
+        sequence: { showSequenceNumbers: true, useMaxWidth: true },
+        quadrantChart: { chartWidth: 600, chartHeight: 600 },
       });
       
       const renderMermaid = async () => {
         try {
-          await new Promise(resolve => setTimeout(resolve, 200));
+          // Attendre que le DOM soit stable
+          await new Promise(resolve => setTimeout(resolve, 300));
           await mermaid.run();
         } catch (err) {
           console.error("Mermaid error:", err);
@@ -91,19 +93,23 @@ const SideDrawer: React.FC<SideDrawerProps> = ({ artifact, onClose, onRefine }) 
       );
     }
 
+    // Split content by mermaid blocks
     const parts = localContent.split('```mermaid');
     
     return parts.map((part, i) => {
       if (i === 0) return <div key={i} className="whitespace-pre-wrap">{part}</div>;
       
-      const [diagram, ...rest] = part.split('```');
+      const subParts = part.split('```');
+      const diagram = subParts[0];
+      const rest = subParts.slice(1).join('```');
+
       return (
-        <div key={i}>
-          <div className="my-10 p-8 bg-zinc-900 border border-white/5 rounded-3xl overflow-x-auto flex flex-col items-center justify-center min-h-[300px] shadow-inner">
-             <div className="text-[10px] font-black uppercase tracking-[0.3em] text-[#007BFF] mb-6 self-start opacity-50">Visualisation Interactive</div>
+        <div key={i} className="my-6">
+          <div className="p-8 bg-zinc-900 border border-white/5 rounded-3xl overflow-x-auto flex flex-col items-center justify-center min-h-[200px] shadow-inner">
+             <div className="text-[10px] font-black uppercase tracking-[0.3em] text-[#3b82f6] mb-6 self-start opacity-50">Visualisation Interactive</div>
              <pre className="mermaid w-full flex justify-center">{diagram.trim()}</pre>
           </div>
-          <div className="whitespace-pre-wrap">{rest.join('```')}</div>
+          {rest && <div className="whitespace-pre-wrap mt-4">{rest}</div>}
         </div>
       );
     });
@@ -120,15 +126,15 @@ const SideDrawer: React.FC<SideDrawerProps> = ({ artifact, onClose, onRefine }) 
             </button>
             <div>
               <h2 className="text-2xl font-black text-white leading-none">{artifact.title}</h2>
-              <span className="text-[10px] font-black uppercase tracking-widest text-[#007BFF]">{artifact.role}</span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-[#3b82f6]">{artifact.role}</span>
             </div>
           </div>
           <button 
             onClick={handleDownload}
-            className="p-3 bg-white/5 rounded-xl hover:text-[#007BFF] transition-all group relative"
+            className="p-3 bg-white/5 rounded-xl hover:text-[#3b82f6] transition-all group relative"
           >
             <Download className="w-5 h-5" />
-            <span className="absolute -bottom-10 right-0 bg-[#007BFF] text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">Télécharger ce fichier</span>
+            <span className="absolute -bottom-10 right-0 bg-[#3b82f6] text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">Télécharger ce fichier</span>
           </button>
         </header>
 
@@ -136,7 +142,7 @@ const SideDrawer: React.FC<SideDrawerProps> = ({ artifact, onClose, onRefine }) 
           {/* Section Variantes */}
           {artifact.variants && artifact.variants.length > 0 && (
             <section className="space-y-6 animate-in slide-in-from-top-4">
-              <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-[#007BFF]">
+              <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-[#3b82f6]">
                 <Layers className="w-4 h-4" /> Variantes Stratégiques
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -144,13 +150,13 @@ const SideDrawer: React.FC<SideDrawerProps> = ({ artifact, onClose, onRefine }) 
                   onClick={resetToRecommended}
                   className={`p-4 rounded-2xl border transition-all text-left flex flex-col gap-2 ${
                     activeVariantId === null 
-                      ? 'bg-[#007BFF]/10 border-[#007BFF] shadow-[0_0_15px_rgba(0,123,255,0.2)]' 
+                      ? 'bg-[#3b82f6]/10 border-[#3b82f6] shadow-[0_0_15px_rgba(59,130,246,0.2)]' 
                       : 'bg-white/5 border-white/5 hover:border-white/20'
                   }`}
                 >
                   <div className="flex justify-between items-center">
                     <span className="text-xs font-black uppercase text-white">Recommandé</span>
-                    {activeVariantId === null && <CheckCircle2 className="w-4 h-4 text-[#007BFF]" />}
+                    {activeVariantId === null && <CheckCircle2 className="w-4 h-4 text-[#3b82f6]" />}
                   </div>
                   <span className="text-[10px] text-zinc-500 line-clamp-2 italic">Solution optimisée par l'agent.</span>
                 </button>
@@ -161,13 +167,13 @@ const SideDrawer: React.FC<SideDrawerProps> = ({ artifact, onClose, onRefine }) 
                     onClick={() => selectVariant(v)}
                     className={`p-4 rounded-2xl border transition-all text-left flex flex-col gap-2 ${
                       activeVariantId === v.id 
-                        ? 'bg-[#007BFF]/10 border-[#007BFF] shadow-[0_0_15px_rgba(0,123,255,0.2)]' 
+                        ? 'bg-[#3b82f6]/10 border-[#3b82f6] shadow-[0_0_15px_rgba(59,130,246,0.2)]' 
                         : 'bg-white/5 border-white/5 hover:border-white/20'
                     }`}
                   >
                     <div className="flex justify-between items-center">
                       <span className="text-xs font-black uppercase text-white line-clamp-1">{v.label}</span>
-                      {activeVariantId === v.id && <CheckCircle2 className="w-4 h-4 text-[#007BFF]" />}
+                      {activeVariantId === v.id && <CheckCircle2 className="w-4 h-4 text-[#3b82f6]" />}
                     </div>
                     <span className="text-[10px] text-zinc-500 line-clamp-2 italic">{v.description}</span>
                   </button>
@@ -176,8 +182,8 @@ const SideDrawer: React.FC<SideDrawerProps> = ({ artifact, onClose, onRefine }) 
             </section>
           )}
 
-          <div className="flex gap-4 p-6 bg-[#007BFF]/5 border border-[#007BFF]/10 rounded-2xl">
-            <Info className="w-5 h-5 text-[#007BFF] shrink-0" />
+          <div className="flex gap-4 p-6 bg-[#3b82f6]/5 border border-[#3b82f6]/10 rounded-2xl">
+            <Info className="w-5 h-5 text-[#3b82f6] shrink-0" />
             <p className="text-sm italic text-zinc-400 leading-relaxed">"{artifact.summary}"</p>
           </div>
 
@@ -187,7 +193,7 @@ const SideDrawer: React.FC<SideDrawerProps> = ({ artifact, onClose, onRefine }) 
         </div>
 
         <footer className="p-8 border-t border-white/5 bg-[#18181b]/50">
-          <div className="flex items-center gap-4 bg-black border border-white/10 rounded-2xl p-2 pl-6 focus-within:border-[#007BFF] transition-all">
+          <div className="flex items-center gap-4 bg-black border border-white/10 rounded-2xl p-2 pl-6 focus-within:border-[#3b82f6] transition-all">
             <input 
               type="text" 
               placeholder="Affiner ce document (ex: Ajoute une section sur les risques...)" 
@@ -199,7 +205,7 @@ const SideDrawer: React.FC<SideDrawerProps> = ({ artifact, onClose, onRefine }) 
             <button 
               disabled={isRefining || !instruction.trim()}
               onClick={handleRefineSubmit}
-              className="w-12 h-12 bg-[#007BFF] text-white rounded-xl flex items-center justify-center disabled:opacity-50 transition-all hover:scale-105"
+              className="w-12 h-12 bg-[#3b82f6] text-white rounded-xl flex items-center justify-center disabled:opacity-50 transition-all hover:scale-105"
             >
               {isRefining ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
             </button>

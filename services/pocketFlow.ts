@@ -1,5 +1,5 @@
 
-import { GoogleGenAI, GenerateContentResponse, Type } from "@google/genai";
+import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { PocketStore, ExpertRole, Artifact, ArtifactType } from "../types";
 
 function safeJsonParse(text: string): any {
@@ -23,13 +23,23 @@ async function withRetry<T>(fn: () => Promise<T>, retries = 3): Promise<T> {
 
 export async function clarifyNode(idea: string, emit: (u: Partial<PocketStore>) => void) {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  emit({ currentStep: "L'Agent Clarificateur cadre votre projet...", status: 'clarifying' });
-  const res = await withRetry(() => ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: `Tu es l'Expert de Cadrage. Pose 4 questions stratégiques pour l'idée : "${idea}". Retourne UNIQUEMENT un JSON: { "questions": [{ "id": "q1", "text": "...", "type": "text" }] }`,
-    config: { responseMimeType: "application/json" }
-  })) as GenerateContentResponse;
-  emit({ questions: safeJsonParse(res.text || "{}").questions || [] });
+  // On force le status clarifying immédiatement
+  emit({ currentStep: "Génération des questions de cadrage...", status: 'clarifying', questions: [] });
+  
+  try {
+    const res = await withRetry(() => ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: `Tu es l'Expert de Cadrage Stratégique. Analyse l'idée : "${idea}". 
+      Génère 4 questions essentielles pour définir le MVP sur une stack Bun, FastAPI et NextJS.
+      Retourne UNIQUEMENT un JSON : { "questions": [{ "id": "q1", "text": "...", "type": "text" }] }`,
+      config: { responseMimeType: "application/json" }
+    })) as GenerateContentResponse;
+    
+    const data = safeJsonParse(res.text || "{}");
+    emit({ questions: data.questions || [], currentStep: "Veuillez répondre aux questions pour lancer la forge." });
+  } catch (err) {
+    emit({ status: 'error', currentStep: "Erreur lors de la clarification." });
+  }
 }
 
 async function expertNode(role: ExpertRole, shared: PocketStore): Promise<Artifact> {
@@ -38,39 +48,35 @@ async function expertNode(role: ExpertRole, shared: PocketStore): Promise<Artifa
   let rolePrompt = "";
 
   switch(role) {
-    case ExpertRole.AUDITOR:
-      type = 'audit';
-      rolePrompt = "Effectue un audit d'intégrité critique de l'ensemble du projet. Identifie les risques de sécurité, de performance et les conflits logiques entre les modules.";
+    case ExpertRole.STRATEGIST:
+      rolePrompt = "Roadmap stratégique 6 mois. INCLUS: Mermaid gantt.";
       break;
-    case ExpertRole.COMPONENTS:
-      type = 'design-system';
-      rolePrompt = "Génère un Design System minimaliste et une bibliothèque de COMPOSANTS UI Tailwind réutilisables (Boutons, Cards, Inputs, Modals).";
-      break;
-    case ExpertRole.AGENT_INITIALIZER:
-      type = 'agent-spec';
-      rolePrompt = `Génère un fichier 'AGENTS.md' (README pour agents IA comme Cursor/Aider). 
-      INSTRUCTIONS OBLIGATOIRES :
-      - Stack technique suggérée : Bun, Next.js (App Router), FastAPI (Python 3.12+), PostgreSQL.
-      - Setup commands : 'pnpm install', 'bun run dev', 'pytest' pour le backend.
-      - Code style : TypeScript strict mode, single quotes, ABSOLUMENT AUCUN POINT-VIRGULE (no semicolons).
-      - Explique la philosophie AGENTS.md : un espace dédié aux instructions machine qui ne polluent pas le README humain.`;
+    case ExpertRole.MARKET:
+      rolePrompt = "Positionnement concurrentiel. INCLUS: Mermaid quadrantChart (Value vs Complexity).";
       break;
     case ExpertRole.ARCHITECT:
-      rolePrompt = "Définit l'architecture globale (Clean Architecture, DDD). Inclus des diagrammes Mermaid (Architecture Map, Flow).";
+      rolePrompt = "Architecture Bun/NextJS/FastAPI. INCLUS: Mermaid sequenceDiagram pour Auth Flow.";
       break;
     case ExpertRole.DATA:
       type = 'data-schema';
-      rolePrompt = "Conçoit le schéma de données SQL (Mermaid ERD) et les interfaces TypeScript (DMMF style).";
+      rolePrompt = "Schéma Prisma/PostgreSQL. INCLUS: Mermaid erDiagram.";
       break;
-    case ExpertRole.QA:
-      rolePrompt = "Définit la stratégie de test : Tests unitaires, d'intégration et E2E avec Playwright.";
+    case ExpertRole.AGENT_INITIALIZER:
+      type = 'agent-spec';
+      rolePrompt = "Génère AGENTS.md (Instructions Cursor/Aider). Stack Bun, FastAPI, NextJS. No semicolons.";
       break;
+    case ExpertRole.AUDITOR:
+      type = 'audit';
+      rolePrompt = "Audit critique final de la cohérence technique et métier.";
+      break;
+    default:
+      rolePrompt = "Analyse experte détaillée du domaine.";
   }
 
   const res = await withRetry(() => ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: `Expert : ${role}. Projet : ${shared.idea_raw}. Intentions : ${JSON.stringify(shared.intent)}. ${rolePrompt}. 
-    Retourne un JSON structuré avec "title", "summary", "content" (Markdown), "vitals" (estimations), "variants" (2 variantes techniques).`,
+    contents: `Rôle : ${role}. Projet : ${shared.idea_raw}. Réponses : ${JSON.stringify(shared.answers)}. Stack : Bun/FastAPI/NextJS. ${rolePrompt}. 
+    Retourne JSON: { "title": "...", "summary": "...", "content": "Markdown...", "vitals": {...} }`,
     config: { responseMimeType: "application/json" }
   })) as GenerateContentResponse;
 
@@ -79,23 +85,21 @@ async function expertNode(role: ExpertRole, shared: PocketStore): Promise<Artifa
     id: `${role}_${Date.now()}`,
     role,
     title: json.title || role,
-    summary: json.summary || "Analyse d'expert.",
+    summary: json.summary || "Analyse en cours.",
     content: json.content || res.text || "",
     type,
-    confidence: 0.98,
-    vitals: json.vitals,
-    audit: json.audit,
-    variants: json.variants
+    confidence: 0.95,
+    vitals: json.vitals
   };
 }
 
 export async function runAgentForge(shared: PocketStore, emit: (u: Partial<PocketStore>) => void) {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   try {
-    emit({ status: 'generating', currentStep: "Extraction de l'Intention Stratégique..." });
+    emit({ status: 'generating', currentStep: "Analyse des intentions..." });
     const intentRes = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `Projet : ${shared.idea_raw}. Réponses : ${JSON.stringify(shared.answers)}. Extrais Goal, Target et Constraints en JSON.`,
+      contents: `Projet : ${shared.idea_raw}. Réponses : ${JSON.stringify(shared.answers)}. Extrais Goal, Target, Constraints en JSON.`,
       config: { responseMimeType: "application/json" }
     });
     const intent = safeJsonParse(intentRes.text || "{}");
@@ -103,23 +107,23 @@ export async function runAgentForge(shared: PocketStore, emit: (u: Partial<Pocke
 
     const experts = [
       ExpertRole.STRATEGIST, ExpertRole.MARKET, ExpertRole.PRODUCT, 
-      ExpertRole.COMPONENTS, ExpertRole.UX, ExpertRole.ARCHITECT, 
+      ExpertRole.UX, ExpertRole.COMPONENTS, ExpertRole.ARCHITECT, 
       ExpertRole.DATA, ExpertRole.API, ExpertRole.SECURITY, 
       ExpertRole.QA, ExpertRole.AGENT_INITIALIZER, ExpertRole.AUDITOR
     ];
 
     let artifacts: Artifact[] = [];
     for (const role of experts) {
-      emit({ currentStep: `Forge en cours par : ${role}...` });
+      emit({ currentStep: `Forge par ${role}...` });
       const art = await expertNode(role, { ...shared, intent, artifacts });
       artifacts = [...artifacts, art];
       emit({ artifacts });
     }
 
-    emit({ currentStep: "Génération du Prototype Maître (Interactivité Tailwind)..." });
+    emit({ currentStep: "Génération du Prototype Maître (NextJS/Tailwind)..." });
     const protoRes = await ai.models.generateContent({
       model: 'gemini-3-pro-preview',
-      contents: `Génère un prototype HTML/Tailwind complet, interactif et ultra-moderne pour : ${shared.idea_raw}.`,
+      contents: `Génère un prototype HTML/Tailwind complet et interactif pour : ${shared.idea_raw}. Style ultra-moderne.`,
     });
     
     const proto: Artifact = {
@@ -132,7 +136,7 @@ export async function runAgentForge(shared: PocketStore, emit: (u: Partial<Pocke
       confidence: 1.0
     };
 
-    emit({ artifacts: [...artifacts, proto], status: 'ready', currentStep: 'Forge terminée' });
+    emit({ artifacts: [...artifacts, proto], status: 'ready', currentStep: 'Forge terminée avec succès.' });
   } catch (err: any) {
     emit({ status: 'error', currentStep: `Erreur : ${err.message}` });
   }
@@ -143,10 +147,10 @@ export async function refineArtifactNode(artifact: Artifact, instruction: string
   emit({ currentStep: `Raffinement de ${artifact.title}...` });
   const res = await withRetry(() => ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: `Raffine ${artifact.content} selon : ${instruction}. Retourne JSON: { "title": "...", "content": "...", "summary": "..." }`,
+    contents: `Raffine ce document : ${artifact.content} selon : ${instruction}. JSON: { "title": "...", "content": "..." }`,
     config: { responseMimeType: "application/json" }
   })) as GenerateContentResponse;
   const json = safeJsonParse(res.text || "{}");
   const newArtifacts = shared.artifacts.map(a => a.id === artifact.id ? { ...artifact, ...json } : a);
-  emit({ artifacts: newArtifacts });
+  emit({ artifacts: newArtifacts, currentStep: "Raffinement terminé." });
 }
