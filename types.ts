@@ -13,7 +13,9 @@ export enum ExpertRole {
   QA = 'QA Lead',
   DELIVERY = 'Release Manager',
   WRITER = 'Technical Writer',
-  PROTOTYPER = 'Synthesis Expert'
+  PROTOTYPER = 'Synthesis Expert',
+  STRATEGIST = 'Strategy Auditor',
+  AUDITOR = 'Integrity Auditor'
 }
 
 export type ArtifactType = 
@@ -27,7 +29,9 @@ export type ArtifactType =
   | 'market-analysis'
   | 'roadmap'
   | 'test-strategy'
-  | 'persona-profile';
+  | 'persona-profile'
+  | 'vitals'
+  | 'audit';
 
 export interface Artifact {
   id: string;
@@ -37,6 +41,16 @@ export interface Artifact {
   content: string;
   type: ArtifactType;
   confidence: number;
+  vitals?: {
+    timeToMarket: string;
+    complexity: number;
+    securityRisk: 'low' | 'medium' | 'high';
+    estimatedBudget: string;
+  };
+  audit?: {
+    status: 'pass' | 'warning' | 'fail';
+    findings: { type: 'conflict' | 'missing' | 'risk'; text: string; severity: 'low' | 'medium' | 'high' }[];
+  };
 }
 
 export interface Question {
