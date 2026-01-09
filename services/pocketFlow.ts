@@ -26,7 +26,12 @@ function safeJsonParse(text: string): any {
   if (cleaned.startsWith("```json")) cleaned = cleaned.replace(/^```json/, "").replace(/```$/, "");
   const match = cleaned.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
   if (!match) return {};
-  try { return JSON.parse(match[1]); } catch { return {}; }
+  try { 
+    const parsed = JSON.parse(match[1]);
+    return parsed;
+  } catch { 
+    return {}; 
+  }
 }
 
 async function withRetry<T>(fn: () => Promise<T>, retries = 5): Promise<T> {
@@ -54,7 +59,8 @@ export async function clarifyNode(idea: string, emit: (u: Partial<PocketStore>) 
     model: 'gemini-3-flash-preview',
     contents: `Tu es l'Agent de Clarification d'AgentForge. Analyse cette idée : "${idea}". 
     Génère 3 à 5 questions cruciales pour affiner le cadrage.
-    Retourne uniquement du JSON: { "questions": [{ "id": "q1", "text": "...", "type": "choice/text", "options": [] }] }`,
+    IMPORTANT: Retourne UNIQUEMENT un objet JSON valide avec la clé "questions".
+    Format: { "questions": [{ "id": "q1", "text": "...", "type": "choice/text", "options": [] }] }`,
     config: { responseMimeType: "application/json" }
   })) as GenerateContentResponse;
   const data = safeJsonParse(res.text || "{}");
@@ -68,18 +74,30 @@ export async function buildFoundations(shared: PocketStore, emit: (u: Partial<Po
   const intentRes = await withRetry(() => ai.models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: `Projet: ${shared.idea_raw}. Réponses: ${JSON.stringify(shared.answers)}. 
-    Synthétise le but, la cible et les contraintes en JSON.`,
+    Synthétise le but, la cible et les contraintes. 
+    RETOURNE UNIQUEMENT UN OBJET JSON suivant ce format exact: 
+    { "goal": "...", "target": "...", "constraints": ["..."] }`,
     config: { responseMimeType: "application/json" }
   })) as GenerateContentResponse;
-  const intent = IntentSchema.parse(safeJsonParse(intentRes.text || "{}"));
+  
+  let intentRaw = safeJsonParse(intentRes.text || "{}");
+  // Sécurité: Si l'IA renvoie un tableau au lieu de l'objet attendu
+  if (Array.isArray(intentRaw)) intentRaw = intentRaw[0] || {};
+  const intent = IntentSchema.parse(intentRaw);
   
   const mapRes = await withRetry(() => ai.models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: `Pack: ${shared.mode}. Intent: ${JSON.stringify(intent)}. 
-    Cartographie les 4 modules clés de l'application en JSON.`,
+    Cartographie les 4 modules clés de l'application.
+    RETOURNE UNIQUEMENT UN OBJET JSON suivant ce format exact: 
+    { "modules": [ { "name": "...", "description": "...", "features": ["..."] } ] }`,
     config: { responseMimeType: "application/json" }
   })) as GenerateContentResponse;
-  const app_map = AppMapSchema.parse(safeJsonParse(mapRes.text || "{}"));
+  
+  let mapRaw = safeJsonParse(mapRes.text || "{}");
+  // Sécurité: Si l'IA renvoie directement le tableau de modules
+  if (Array.isArray(mapRaw)) mapRaw = { modules: mapRaw };
+  const app_map = AppMapSchema.parse(mapRaw);
   
   emit({ intent, app_map });
   return { intent, app_map };
