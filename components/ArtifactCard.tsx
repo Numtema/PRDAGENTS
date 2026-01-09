@@ -15,18 +15,18 @@ interface ArtifactCardProps {
 
 const getRoleIcon = (role: ExpertRole) => {
   switch (role) {
-    case ExpertRole.MARKET: return <Globe className="w-5 h-5" />;
-    case ExpertRole.PRODUCT: return <Target className="w-5 h-5" />;
-    case ExpertRole.UX: return <Users className="w-5 h-5" />;
-    case ExpertRole.ARCHITECT: return <Cpu className="w-5 h-5" />;
-    case ExpertRole.API: return <Terminal className="w-5 h-5" />;
-    case ExpertRole.SECURITY: return <Shield className="w-5 h-5" />;
-    case ExpertRole.DATA: return <Database className="w-5 h-5" />;
-    case ExpertRole.QA: return <Shield className="w-5 h-5" />;
-    case ExpertRole.DELIVERY: return <Rocket className="w-5 h-5" />;
-    case ExpertRole.WRITER: return <FileText className="w-5 h-5" />;
-    case ExpertRole.PROTOTYPER: return <Zap className="w-5 h-5" />;
-    default: return <Code className="w-5 h-5" />;
+    case ExpertRole.MARKET: return <Globe className="w-4 h-4" />;
+    case ExpertRole.PRODUCT: return <Target className="w-4 h-4" />;
+    case ExpertRole.UX: return <Users className="w-4 h-4" />;
+    case ExpertRole.ARCHITECT: return <Cpu className="w-4 h-4" />;
+    case ExpertRole.API: return <Terminal className="w-4 h-4" />;
+    case ExpertRole.SECURITY: return <Shield className="w-4 h-4" />;
+    case ExpertRole.DATA: return <Database className="w-4 h-4" />;
+    case ExpertRole.QA: return <Shield className="w-4 h-4" />;
+    case ExpertRole.DELIVERY: return <Rocket className="w-4 h-4" />;
+    case ExpertRole.WRITER: return <FileText className="w-4 h-4" />;
+    case ExpertRole.PROTOTYPER: return <Zap className="w-4 h-4" />;
+    default: return <Code className="w-4 h-4" />;
   }
 };
 
@@ -35,30 +35,27 @@ const ArtifactCard: React.FC<ArtifactCardProps> = ({ artifact, delay, onClick })
     <div 
       onClick={onClick}
       style={{ animationDelay: `${delay}ms` }}
-      className="m3-card group cursor-pointer flex flex-col p-6 h-[400px] animate-in fade-in slide-in-from-bottom-4 duration-500"
+      className="bg-[#18181b] border border-white/5 rounded-[28px] p-6 h-[320px] flex flex-col group cursor-pointer hover:border-[#007BFF]/40 transition-all animate-in fade-in slide-in-from-bottom-2"
     >
-      <div className="flex items-center gap-4 mb-6">
-        <div className="w-12 h-12 rounded-2xl bg-[#007BFF]/10 text-[#007BFF] flex items-center justify-center group-hover:bg-[#007BFF] group-hover:text-white transition-all">
+      <div className="flex items-center justify-between mb-8">
+        <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center group-hover:bg-[#007BFF] group-hover:text-white transition-all">
           {getRoleIcon(artifact.role)}
         </div>
-        <div className="flex-1 overflow-hidden">
-          <h4 className="font-bold text-white truncate">{artifact.title}</h4>
-          <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">{artifact.role}</span>
-        </div>
-        <div className="px-2 py-1 bg-white/5 rounded text-[8px] font-mono text-zinc-400">
-          CONF {(artifact.confidence * 100).toFixed(0)}%
+        <div className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600 group-hover:text-[#007BFF] transition-all">
+          {(artifact.confidence * 100).toFixed(0)}% CONF
         </div>
       </div>
 
-      <div className="flex-1 bg-[#09090b] rounded-2xl p-4 overflow-hidden border border-white/5 group-hover:border-[#007BFF]/30 transition-all">
-        <p className="text-sm text-zinc-400 leading-relaxed italic line-clamp-6">
+      <div className="flex-1 space-y-3">
+        <h4 className="text-lg font-bold text-white group-hover:text-[#007BFF] transition-colors">{artifact.title}</h4>
+        <p className="text-sm text-zinc-500 line-clamp-4 leading-relaxed font-light italic">
           "{artifact.summary}"
         </p>
       </div>
 
-      <div className="mt-6 flex justify-between items-center">
-        <span className="text-[9px] font-bold uppercase tracking-widest text-[#007BFF]">Consulter l'artefact</span>
-        <div className="w-2 h-2 rounded-full bg-[#007BFF] animate-pulse" />
+      <div className="pt-6 border-t border-white/5 flex justify-between items-center opacity-40 group-hover:opacity-100 transition-all">
+        <span className="text-[10px] font-black uppercase tracking-widest">{artifact.role}</span>
+        <div className="w-1.5 h-1.5 rounded-full bg-[#007BFF]" />
       </div>
     </div>
   );

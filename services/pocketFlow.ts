@@ -29,9 +29,6 @@ function safeJsonParse(text: string): any {
   try { return JSON.parse(match[1]); } catch { return {}; }
 }
 
-/**
- * Exponential Backoff with Jitter to handle 429 errors gracefully.
- */
 async function withRetry<T>(fn: () => Promise<T>, retries = 5): Promise<T> {
   let lastErr: any;
   for (let i = 0; i < retries; i++) {
@@ -39,13 +36,10 @@ async function withRetry<T>(fn: () => Promise<T>, retries = 5): Promise<T> {
       return await fn(); 
     } catch (e: any) { 
       lastErr = e;
-      // If 429 or 500, wait longer
       const isRateLimit = e?.message?.includes('429') || e?.message?.includes('quota');
       const waitTime = isRateLimit 
         ? Math.pow(2, i) * 3000 + Math.random() * 1000 
         : Math.pow(2, i) * 1000 + Math.random() * 500;
-      
-      console.warn(`API Error (Attempt ${i + 1}/${retries}). Retrying in ${Math.round(waitTime)}ms...`, e.message);
       await new Promise(r => setTimeout(r, waitTime)); 
     }
   }
@@ -58,7 +52,7 @@ export async function clarifyNode(idea: string, emit: (u: Partial<PocketStore>) 
   emit({ currentStep: "Analyse des zones d'ombre...", status: "clarifying" });
   const res = await withRetry(() => ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: `Tu es l'Agent de Clarification d'AgentForge. Analyse cette idée de projet : "${idea}". 
+    contents: `Tu es l'Agent de Clarification d'AgentForge. Analyse cette idée : "${idea}". 
     Génère 3 à 5 questions cruciales pour affiner le cadrage.
     Retourne uniquement du JSON: { "questions": [{ "id": "q1", "text": "...", "type": "choice/text", "options": [] }] }`,
     config: { responseMimeType: "application/json" }
@@ -69,22 +63,20 @@ export async function clarifyNode(idea: string, emit: (u: Partial<PocketStore>) 
 }
 
 export async function buildFoundations(shared: PocketStore, emit: (u: Partial<PocketStore>) => void) {
-  emit({ currentStep: "Construction du Project Manifest...", status: "generating" });
+  emit({ currentStep: "Construction du Manifeste...", status: "generating" });
   
   const intentRes = await withRetry(() => ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: `Projet: ${shared.idea_raw}. Réponses clarification: ${JSON.stringify(shared.answers)}. 
+    contents: `Projet: ${shared.idea_raw}. Réponses: ${JSON.stringify(shared.answers)}. 
     Synthétise le but, la cible et les contraintes en JSON.`,
     config: { responseMimeType: "application/json" }
   })) as GenerateContentResponse;
   const intent = IntentSchema.parse(safeJsonParse(intentRes.text || "{}"));
   
-  // Petit délai entre les fondations
-  await new Promise(r => setTimeout(r, 1000));
-
   const mapRes = await withRetry(() => ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: `Basé sur l'Intent: ${JSON.stringify(intent)}, cartographie les 4 modules clés de l'application en JSON.`,
+    contents: `Pack: ${shared.mode}. Intent: ${JSON.stringify(intent)}. 
+    Cartographie les 4 modules clés de l'application en JSON.`,
     config: { responseMimeType: "application/json" }
   })) as GenerateContentResponse;
   const app_map = AppMapSchema.parse(safeJsonParse(mapRes.text || "{}"));
@@ -97,26 +89,31 @@ async function expertNode(role: ExpertRole, shared: PocketStore, emit: (u: Parti
   let type: ArtifactType = 'text';
   let task = "";
 
+  const packContext = {
+    lite: "Focus sur la vitesse, fonctionnalités essentielles uniquement.",
+    normal: "Standard industriel complet, PRD détaillée, UX travaillée.",
+    detailed: "Haute sécurité, conformité (RGPD), architecture distribuée, tests exhaustifs."
+  }[shared.mode];
+
   switch (role) {
-    case ExpertRole.MARKET: type = 'market-analysis'; task = "Analyse de marché, opportunités, concurrence et positionnement stratégique."; break;
-    case ExpertRole.PRODUCT: type = 'text'; task = "Rédaction de la PRD complète incluant les objectifs, OKRs et metrics de succès."; break;
-    case ExpertRole.UX: type = 'ux-flow'; task = "User personas détaillés (besoins/frustrations) et flows de navigation."; break;
-    case ExpertRole.ARCHITECT: type = 'prototype'; task = "Architecture système, choix techniques et diagramme Mermaid C4 (Container)."; break;
-    case ExpertRole.API: type = 'api-spec'; task = "Spécifications des endpoints API principaux (REST/GraphQL)."; break;
-    case ExpertRole.SECURITY: type = 'security-spec'; task = "Analyse des risques, conformité (RGPD) et mesures de protection."; break;
-    case ExpertRole.DATA: type = 'data-schema'; task = "Modèle de données relationnel et schéma Entité-Relation Mermaid."; break;
-    case ExpertRole.QA: type = 'test-strategy'; task = "Stratégie de test, scénarios critiques et plan de validation."; break;
-    case ExpertRole.DELIVERY: type = 'roadmap'; task = "Roadmap itérative (V1/V2), estimations d'efforts en Story Points et dépendances."; break;
-    default: task = "Expertise métier spécialisée.";
+    case ExpertRole.MARKET: type = 'market-analysis'; task = "Marché, concurrence et USP."; break;
+    case ExpertRole.PRODUCT: type = 'text'; task = "PRD complète, OKRs et User Stories."; break;
+    case ExpertRole.UX: type = 'ux-flow'; task = "Personas et flow de navigation Mermaid."; break;
+    case ExpertRole.ARCHITECT: type = 'prototype'; task = "Schéma d'architecture Mermaid C4."; break;
+    case ExpertRole.API: type = 'api-spec'; task = "Endpoints clés et modèles de données."; break;
+    case ExpertRole.SECURITY: type = 'security-spec'; task = "Analyse des risques et conformité."; break;
+    case ExpertRole.DATA: type = 'data-schema'; task = "Schéma ERD Mermaid."; break;
+    case ExpertRole.QA: type = 'test-strategy'; task = "Stratégie de test et scénarios critiques."; break;
+    case ExpertRole.DELIVERY: type = 'roadmap'; task = "Roadmap V1/V2 et estimations."; break;
+    default: task = "Expertise métier.";
   }
 
-  const context = `Intent: ${JSON.stringify(shared.intent)}. Map: ${JSON.stringify(shared.app_map)}.`;
-  
   const res = await withRetry(() => ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: `Rôle: ${role}. Langue: ${shared.language}. Pack: ${shared.mode}. Contexte: ${context}. Tâche: ${task}
-    IMPORTANT: Si pertinent, inclus un diagramme Mermaid valide (entre triple backticks mermaid). 
-    Retourne un JSON: { "title": "...", "summary": "...", "content": "Markdown..." }`,
+    contents: `Expert: ${role}. Pack: ${shared.mode} (${packContext}). Tâche: ${task}
+    Contexte: ${JSON.stringify(shared.intent)}.
+    IMPORTANT: Inclure des diagrammes Mermaid entre triple backticks si pertinent.
+    Retourne JSON: { "title": "...", "summary": "...", "content": "Markdown..." }`,
     config: { responseMimeType: "application/json" }
   })) as GenerateContentResponse;
 
@@ -124,8 +121,8 @@ async function expertNode(role: ExpertRole, shared: PocketStore, emit: (u: Parti
   const artifact: Artifact = {
     id: role.toLowerCase().replace(/\s+/g, '_'),
     role,
-    title: json.title || `${role} Output`,
-    summary: json.summary || "Analyse terminée.",
+    title: json.title || role,
+    summary: json.summary || "Document généré.",
     content: json.content || res.text || "",
     type,
     confidence: 0.98
@@ -145,14 +142,10 @@ export async function refineArtifactNode(
   
   const res = await withRetry(() => ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: `Tu es un expert en raffinement de documentation. 
-    Artefact actuel (${artifact.role}): 
-    ${artifact.content}
-    
-    Instruction de modification de l'utilisateur : "${instruction}"
-    
-    Réécris l'artefact en tenant compte de l'instruction tout en gardant la cohérence avec le projet global : ${JSON.stringify(shared.intent)}.
-    Retourne un JSON avec 'title', 'summary' et 'content' (Markdown).`,
+    contents: `Tu es un expert en raffinement. Artefact actuel : ${artifact.content}
+    Instruction utilisateur : "${instruction}"
+    Réécris le document Markdown en intégrant l'instruction. Garde le même style.
+    Retourne JSON: { "title": "...", "summary": "...", "content": "Markdown..." }`,
     config: { responseMimeType: "application/json" }
   })) as GenerateContentResponse;
 
@@ -175,35 +168,31 @@ export async function runAgentForge(
 ) {
   try {
     const foundations = await buildFoundations(shared, emit);
-    
     const experts = [
       ExpertRole.MARKET, ExpertRole.PRODUCT, ExpertRole.UX,
       ExpertRole.ARCHITECT, ExpertRole.API, ExpertRole.DATA,
       ExpertRole.SECURITY, ExpertRole.QA, ExpertRole.DELIVERY
     ];
 
-    // PASSAGE EN SÉQUENTIEL POUR ÉVITER LES ERREURS 429
     for (const role of experts) {
-      emit({ currentStep: `L'expert ${role} travaille...` });
+      emit({ currentStep: `L'expert ${role} forge sa partie...` });
       await expertNode(role, { ...shared, ...foundations }, emit);
-      // Pause de sécurité entre agents
-      await new Promise(resolve => setTimeout(resolve, 1200));
+      await new Promise(r => setTimeout(r, 1500)); 
     }
     
-    // Synthesis final
-    emit({ currentStep: "Génération du prototype visuel maître..." });
+    emit({ currentStep: "Synthèse de la vision visuelle...", status: "generating" });
     const synthRes = await withRetry(() => ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `Génère un prototype HTML/Tailwind interactif pour: ${shared.idea_raw}. 
-      Utilise le contexte des artefacts générés: ${shared.artifacts.map(a => a.summary).join('; ')}.
-      Retourne uniquement du HTML brut.`,
+      contents: `Génère un prototype HTML/Tailwind statique mais pro pour: ${shared.idea_raw}. 
+      Récupère les idées des artefacts : ${shared.artifacts.map(a => a.title).join(', ')}.
+      Retourne uniquement du HTML.`,
     })) as GenerateContentResponse;
 
     const proto: Artifact = {
       id: 'visual_synthesis',
       role: ExpertRole.PROTOTYPER,
-      title: 'Visual Master Projection',
-      summary: 'Simulation interactive de la vision produit synthétisée.',
+      title: 'Vision Maître',
+      summary: 'Simulation visuelle du produit synthétisé.',
       content: (synthRes.text || "").replace(/```html/g, "").replace(/```/g, "").trim(),
       type: 'prototype',
       confidence: 1.0
@@ -211,10 +200,6 @@ export async function runAgentForge(
 
     emit({ artifacts: [...shared.artifacts, proto], status: "ready" });
   } catch (err: any) {
-    console.error(err);
-    emit({ 
-      status: "error", 
-      currentStep: `Erreur critique: ${err.message || "Quota API dépassé"}.` 
-    });
+    emit({ status: "error", currentStep: `Erreur: ${err.message}` });
   }
 }
